@@ -60,7 +60,8 @@
             "breakfast",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": "Idli"
         }
       ],
       "items": [
@@ -363,7 +364,8 @@
           "suggest": false,
           "sub": "Idli"
         }
-      ]
+      ],
+      "bare": "Idli"
     },
     {
       "name": "Dosa",
@@ -405,7 +407,8 @@
             "breakfast",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": "Plain dosa"
         }
       ],
       "items": [
@@ -1311,7 +1314,8 @@
           "suggest": true,
           "sub": "Dosa"
         }
-      ]
+      ],
+      "bare": "Plain dosa"
     },
     {
       "name": "Upma",
@@ -1349,7 +1353,8 @@
             "breakfast",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -1695,7 +1700,8 @@
           "suggest": true,
           "sub": "Upma"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Poha",
@@ -1740,7 +1746,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -2165,7 +2172,8 @@
           "regional": true,
           "sub": "Poha"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Paratha",
@@ -2203,7 +2211,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": "Plain paratha"
         }
       ],
       "items": [
@@ -2504,9 +2513,34 @@
           "sub": "Paratha"
         },
         {
+          "name": "Plain paratha",
+          "aka": [
+            "sada paratha"
+          ],
+          "contains": [
+            "wheat",
+            "dairy"
+          ],
+          "contains_main": [
+            "wheat"
+          ],
+          "ingredients": [
+            {
+              "name": "atta",
+              "main": true
+            },
+            {
+              "name": "ghee",
+              "main": false
+            }
+          ],
+          "diet": "veg",
+          "suggest": true,
+          "sub": "Paratha"
+        },
+        {
           "name": "Lachha paratha",
           "aka": [
-            "plain paratha",
             "tikona paratha"
           ],
           "contains": [
@@ -2710,7 +2744,8 @@
           "suggest": true,
           "sub": "Paratha"
         }
-      ]
+      ],
+      "bare": "Plain paratha"
     },
     {
       "name": "Thepla",
@@ -2742,7 +2777,8 @@
             "dinner",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": "Plain thepla"
         }
       ],
       "items": [
@@ -2937,7 +2973,8 @@
           "suggest": true,
           "sub": "Thepla"
         }
-      ]
+      ],
+      "bare": "Plain thepla"
     },
     {
       "name": "Thalipeeth",
@@ -2965,7 +3002,8 @@
           "meals": [
             "breakfast",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -3131,7 +3169,8 @@
           "suggest": true,
           "sub": "Thalipeeth"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Chilla",
@@ -3168,7 +3207,8 @@
             "breakfast",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -3341,7 +3381,8 @@
           "suggest": true,
           "sub": "Chilla"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Appam",
@@ -3373,7 +3414,8 @@
           "meals": [
             "breakfast",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -3468,7 +3510,8 @@
           "suggest": true,
           "sub": "Appam"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Puttu",
@@ -3496,7 +3539,8 @@
           "meals": [
             "breakfast",
             "dinner"
-          ]
+          ],
+          "bare": "Rice puttu"
         }
       ],
       "items": [
@@ -3599,7 +3643,8 @@
           "suggest": true,
           "sub": "Puttu"
         }
-      ]
+      ],
+      "bare": "Rice puttu"
     },
     {
       "name": "Idiyappam",
@@ -3637,7 +3682,8 @@
             "breakfast",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -3784,7 +3830,8 @@
           "suggest": true,
           "sub": "Idiyappam"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Kozhukattai",
@@ -3816,7 +3863,8 @@
           "meals": [
             "breakfast",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -3933,7 +3981,8 @@
           "suggest": true,
           "sub": "Kozhukattai"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Akki roti",
@@ -3962,7 +4011,8 @@
           "meals": [
             "breakfast",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -4088,7 +4138,8 @@
           "regional": true,
           "sub": "Akki roti"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Paniyaram",
@@ -4123,7 +4174,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -4245,7 +4297,8 @@
           "suggest": true,
           "sub": "Paniyaram"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Puri",
@@ -4285,7 +4338,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -4503,7 +4557,8 @@
           "suggest": false,
           "sub": "Puri"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Kachori",
@@ -4535,7 +4590,8 @@
           "meals": [
             "breakfast",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -4666,7 +4722,8 @@
           "suggest": true,
           "sub": "Kachori"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Porridge",
@@ -4702,7 +4759,8 @@
           ],
           "meals": [
             "breakfast"
-          ]
+          ],
+          "bare": "Rice kanji"
         }
       ],
       "items": [
@@ -4896,8 +4954,31 @@
           "suggest": true,
           "regional": true,
           "sub": "Porridge"
+        },
+        {
+          "name": "Rice kanji",
+          "aka": [
+            "ganji",
+            "rice porridge",
+            "arisi kanji"
+          ],
+          "contains": [
+            "white_rice"
+          ],
+          "contains_main": [
+            "white_rice"
+          ],
+          "ingredients": [
+            {
+              "name": "rice",
+              "main": true
+            }
+          ],
+          "suggest": true,
+          "sub": "Porridge"
         }
-      ]
+      ],
+      "bare": "Rice kanji"
     },
     {
       "name": "Cereal",
@@ -4924,7 +5005,8 @@
           ],
           "meals": [
             "breakfast"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -5043,7 +5125,8 @@
           "suggest": true,
           "sub": "Cereal"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Toast",
@@ -5073,7 +5156,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -5269,7 +5353,8 @@
           "suggest": true,
           "sub": "Toast"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Sandwich",
@@ -5300,7 +5385,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -5634,7 +5720,8 @@
           "suggest": true,
           "sub": "Sandwich"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Egg",
@@ -5681,7 +5768,8 @@
             "dinner",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Egg curry",
@@ -5700,7 +5788,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -6163,7 +6252,8 @@
           "regional": true,
           "sub": "Egg curry"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Dhokla",
@@ -6197,7 +6287,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -6532,7 +6623,8 @@
           "suggest": true,
           "sub": "Dhokla"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pav meal",
@@ -6572,7 +6664,8 @@
             "breakfast",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Pav bhaji",
@@ -6587,7 +6680,8 @@
           "meals": [
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Vada pav",
@@ -6600,7 +6694,8 @@
           ],
           "meals": [
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -6930,7 +7025,8 @@
           "suggest": true,
           "sub": "Vada pav"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pitha",
@@ -6964,7 +7060,8 @@
           "meals": [
             "breakfast",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7221,7 +7318,8 @@
           "suggest": false,
           "sub": "Pitha"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Roti",
@@ -7264,7 +7362,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7416,7 +7515,8 @@
           "suggest": false,
           "sub": "Roti"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Bhakri",
@@ -7455,7 +7555,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7559,7 +7660,8 @@
           "suggest": false,
           "sub": "Bhakri"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Rice",
@@ -7598,7 +7700,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7686,7 +7789,8 @@
           "suggest": false,
           "sub": "Rice"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Curd",
@@ -7724,7 +7828,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7752,7 +7857,8 @@
           "suggest": false,
           "sub": "Curd"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Mudde",
@@ -7784,7 +7890,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -7832,7 +7939,8 @@
           "suggest": false,
           "sub": "Mudde"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Dal",
@@ -7893,7 +8001,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Rajma/Chole",
@@ -7916,7 +8025,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Pappu",
@@ -7929,7 +8039,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Amti/Varan",
@@ -7944,7 +8055,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Pithla/Zunka",
@@ -7960,7 +8072,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Gujarati dal",
@@ -7973,7 +8086,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Bengali dal",
@@ -7988,7 +8102,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Dalma",
@@ -8001,7 +8116,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Paruppu",
@@ -8019,7 +8135,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -9496,7 +9613,8 @@
           "suggest": true,
           "sub": "Pithla/Zunka"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Rice curry",
@@ -9548,7 +9666,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Rasam",
@@ -9562,7 +9681,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": "Tomato rasam"
         },
         {
           "name": "Kuzhambu/Pulusu",
@@ -9580,7 +9700,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Kootu",
@@ -9594,7 +9715,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": "Mixed vegetable kootu"
         },
         {
           "name": "Kadhi",
@@ -9609,7 +9731,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Mor kuzhambu/Pulissery",
@@ -9627,7 +9750,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -10658,6 +10782,39 @@
           "sub": "Kuzhambu/Pulusu"
         },
         {
+          "name": "Mixed vegetable kootu",
+          "aka": [
+            "veg kootu",
+            "mixed kootu"
+          ],
+          "cuisines": [
+            "tamil",
+            "kerala"
+          ],
+          "contains": [
+            "coconut"
+          ],
+          "contains_main": [
+            "coconut"
+          ],
+          "ingredients": [
+            {
+              "name": "mixed vegetables",
+              "main": true
+            },
+            {
+              "name": "moong dal",
+              "main": true
+            },
+            {
+              "name": "coconut",
+              "main": true
+            }
+          ],
+          "suggest": true,
+          "sub": "Kootu"
+        },
+        {
           "name": "Chow chow kootu",
           "cuisines": [
             "tamil",
@@ -11078,7 +11235,8 @@
           "regional": true,
           "sub": "Mor kuzhambu/Pulissery"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Sabzi",
@@ -11141,7 +11299,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Poriyal/Thoran",
@@ -11159,7 +11318,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Vepudu",
@@ -11173,7 +11333,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Torkari/Ghonto",
@@ -11191,7 +11352,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Bhaja",
@@ -11206,7 +11368,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Bharta/Chokha",
@@ -11230,7 +11393,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Bharwa",
@@ -11250,7 +11414,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -12981,7 +13146,8 @@
           "regional": true,
           "sub": "Bharwa"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Gravy",
@@ -13040,7 +13206,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Paneer",
@@ -13054,7 +13221,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Kofta",
@@ -13068,7 +13236,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Kurma",
@@ -13082,7 +13251,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Dalna",
@@ -13095,7 +13265,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Kerala curry",
@@ -13115,7 +13286,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -14732,7 +14904,8 @@
           "suggest": true,
           "sub": "Kerala curry"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pulao",
@@ -14772,7 +14945,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": "Vegetable pulao"
         }
       ],
       "items": [
@@ -15232,7 +15406,8 @@
           "suggest": true,
           "sub": "Pulao"
         }
-      ]
+      ],
+      "bare": "Vegetable pulao"
     },
     {
       "name": "Biryani",
@@ -15266,7 +15441,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -15729,7 +15905,8 @@
           "regional": true,
           "sub": "Biryani"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Khichdi",
@@ -15773,7 +15950,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": "Moong dal khichdi"
         },
         {
           "name": "Pongal",
@@ -15789,7 +15967,8 @@
           "meals": [
             "breakfast",
             "dinner"
-          ]
+          ],
+          "bare": "Ven pongal"
         }
       ],
       "items": [
@@ -16212,7 +16391,8 @@
           "suggest": true,
           "sub": "Pongal"
         }
-      ]
+      ],
+      "bare": "Moong dal khichdi"
     },
     {
       "name": "Flavoured rice",
@@ -16249,7 +16429,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -16595,7 +16776,8 @@
           "regional": true,
           "sub": "Flavoured rice"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Fried rice",
@@ -16624,7 +16806,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -16828,7 +17011,8 @@
           "suggest": true,
           "sub": "Fried rice"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Noodles",
@@ -16862,7 +17046,8 @@
             "dinner",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -17124,7 +17309,8 @@
           "suggest": true,
           "sub": "Noodles"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pasta",
@@ -17153,7 +17339,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -17458,7 +17645,8 @@
           "suggest": true,
           "sub": "Pasta"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Manchurian",
@@ -17488,7 +17676,8 @@
           "meals": [
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -17766,7 +17955,8 @@
           "suggest": true,
           "sub": "Manchurian"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Soup",
@@ -17795,7 +17985,8 @@
           "meals": [
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -18026,7 +18217,8 @@
           "suggest": true,
           "sub": "Soup"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Chicken",
@@ -18072,7 +18264,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Fry/Dry",
@@ -18093,7 +18286,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Keema",
@@ -18108,7 +18302,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -18940,7 +19135,8 @@
           "suggest": false,
           "sub": "Fry/Dry"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Mutton",
@@ -18985,7 +19181,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Fry/Dry",
@@ -19000,7 +19197,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Keema",
@@ -19016,7 +19214,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -19671,7 +19870,8 @@
           "suggest": true,
           "sub": "Keema"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pork",
@@ -19705,7 +19905,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -19917,7 +20118,8 @@
           "regional": true,
           "sub": "Pork"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Fish & seafood",
@@ -19971,7 +20173,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Fish fry",
@@ -19990,7 +20193,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         },
         {
           "name": "Prawn",
@@ -20012,7 +20216,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -20983,7 +21188,8 @@
           "regional": true,
           "sub": "Prawn"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Raita",
@@ -21017,7 +21223,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -21277,7 +21484,8 @@
           "regional": true,
           "sub": "Raita"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Salad",
@@ -21316,7 +21524,8 @@
             "dinner",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -21603,7 +21812,8 @@
           "suggest": true,
           "sub": "Salad"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Chutney",
@@ -21644,7 +21854,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -22119,7 +22330,8 @@
           "regional": true,
           "sub": "Chutney"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pickle",
@@ -22161,7 +22373,8 @@
             "lunch",
             "dinner",
             "tiffin"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -22373,7 +22586,8 @@
           "regional": true,
           "sub": "Pickle"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Papad",
@@ -22409,7 +22623,8 @@
           "meals": [
             "lunch",
             "dinner"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -22527,7 +22742,8 @@
           "suggest": true,
           "sub": "Papad"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Buttermilk",
@@ -22567,7 +22783,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -22721,7 +22938,8 @@
           "regional": true,
           "sub": "Buttermilk"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Fruit",
@@ -22759,7 +22977,8 @@
             "breakfast",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -22845,7 +23064,8 @@
           "suggest": true,
           "sub": "Fruit"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Roll",
@@ -22880,7 +23100,8 @@
             "dinner",
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -23073,7 +23294,8 @@
           "suggest": true,
           "sub": "Roll"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Namkeen",
@@ -23115,7 +23337,8 @@
           "meals": [
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -23469,7 +23692,8 @@
           "suggest": true,
           "sub": "Namkeen"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Cutlet",
@@ -23503,7 +23727,8 @@
           "meals": [
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -23711,7 +23936,8 @@
           "suggest": true,
           "sub": "Cutlet"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Pakora",
@@ -23747,7 +23973,8 @@
           ],
           "meals": [
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -24033,7 +24260,8 @@
           "regional": true,
           "sub": "Pakora"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Samosa",
@@ -24061,7 +24289,8 @@
           ],
           "meals": [
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -24218,7 +24447,8 @@
           "suggest": true,
           "sub": "Samosa"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Vada",
@@ -24248,7 +24478,8 @@
           "meals": [
             "breakfast",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -24461,7 +24692,8 @@
             "snack"
           ]
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Chaat",
@@ -24490,7 +24722,8 @@
           ],
           "meals": [
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -24924,7 +25157,8 @@
           "suggest": true,
           "sub": "Chaat"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Sundal",
@@ -24951,7 +25185,8 @@
           "meals": [
             "tiffin",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -25068,7 +25303,8 @@
           "suggest": true,
           "sub": "Sundal"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Kheer",
@@ -25107,7 +25343,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": "Rice kheer"
         }
       ],
       "items": [
@@ -25474,7 +25711,8 @@
           "regional": true,
           "sub": "Kheer"
         }
-      ]
+      ],
+      "bare": "Rice kheer"
     },
     {
       "name": "Halwa",
@@ -25514,7 +25752,8 @@
             "lunch",
             "dinner",
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -25868,7 +26107,8 @@
           "suggest": true,
           "sub": "Halwa"
         }
-      ]
+      ],
+      "bare": null
     },
     {
       "name": "Ladoo",
@@ -25901,7 +26141,8 @@
           ],
           "meals": [
             "snack"
-          ]
+          ],
+          "bare": null
         }
       ],
       "items": [
@@ -26202,7 +26443,8 @@
           "suggest": true,
           "sub": "Ladoo"
         }
-      ]
+      ],
+      "bare": null
     }
   ],
   "ingredients": {

@@ -113,6 +113,7 @@ Palak paratha: atta, spinach | ghee
 Pyaaz paratha: atta, onion | ghee, butter
 Mixed vegetable paratha: atta, mixed vegetables | potato, carrot, ghee
 Dal paratha: atta, chana dal | ghee
+Plain paratha: atta | ghee
 Lachha paratha: atta, ghee
 Matar paratha: atta, green peas | ghee
 Sattu paratha: atta, sattu | onion, garlic, ghee
@@ -203,6 +204,7 @@ Overnight oats: oats, milk | sugar, honey, almonds
 Sweet milk dalia: broken wheat, milk, sugar | almonds, cashews
 Ragi malt: ragi flour, milk | jaggery
 Lapsi: broken wheat, ghee, jaggery | almonds
+Rice kanji: rice
 
 ## Cereal
 Cornflakes with milk: cornflakes, milk | sugar
@@ -388,6 +390,7 @@ Mukkala pulusu: mixed vegetables, tamarind | brinjal, potato, onion, jaggery
 Pineapple gojju: pineapple, tamarind, jaggery
 Hagalakai gojju: karela, tamarind, jaggery
 Chow chow kootu: chow chow, moong dal, coconut
+Mixed vegetable kootu: mixed vegetables, moong dal, coconut
 Poricha kootu: mixed vegetables, moong dal, coconut
 Keerai kootu: amaranth, moong dal, coconut
 Pudalangai kootu: snake gourd, moong dal, coconut

@@ -13,8 +13,9 @@ export type CatalogIngredient = { name: string; main: boolean };
 /** `contains` is derived from all its ingredients, `contains_main` from its main ones (scripts/kinds/ingredients.js). */
 export type CatalogItem = { name: string; aka?: string[]; cuisines?: string[]; contains: string[]; contains_main: string[]; ingredients: CatalogIngredient[];
   suggest: boolean; regional?: boolean; sub: string; diet?: string; meals?: string[] };
-export type CatalogSub = { name: string; aka: string[]; cuisines: string[]; meals: string[] };
-export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; meals: string[]; staple: boolean; part: string; diet: string;
+/** `bare`: the one dish a family means by the word alone ("dosa" is Plain dosa), or null when the word is a category that rotates through the items. */
+export type CatalogSub = { name: string; aka: string[]; cuisines: string[]; meals: string[]; bare: string | null };
+export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; meals: string[]; staple: boolean; part: string; diet: string; bare: string | null;
   subs: CatalogSub[]; items: CatalogItem[] };
 /** A word that means different dishes by region (decided 20): each meaning holds in its cuisines. */
 export type RegionalMeaning = { cuisines: string[]; kind: string; sub: string | null };
@@ -85,6 +86,15 @@ export const catalogItem = (name: string): { kind: CatalogKind; item: CatalogIte
   }
   return byItemName.get(norm(name)) ?? null;
 };
+
+/** The dish a bare word means: the sub-kind's when one is given and has one, else the kind's. Null for a category word (upma, sabzi,
+ *  gravy: it rotates through the catalog), for a staple (its everyday item is `contentsItem`'s) and for a kind the catalog lacks. */
+export function bareDish(kind: string, sub?: string | null): string | null {
+  const k = catalogKind(kind);
+  if (!k || k.staple) return null;
+  const sb = sub ? k.subs.find((s) => subNames(s).some((n) => norm(n) === norm(sub))) : null;
+  return sb?.bare ?? k.bare ?? null;
+}
 
 /** The meals a NEW item of this kind, sub-kind or item may be suggested at (decided 18). They never limit a family's own dish. */
 export function suggestMeals(m: { kind: string; sub?: string | null; item?: string | null }): string[] {

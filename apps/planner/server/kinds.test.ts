@@ -4,7 +4,7 @@
 // cuisine profile.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
-import { CATALOG, catalogContains, catalogSub, checkMealShape, matchDish, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestable, suggestMeals, type MealKind,
+import { CATALOG, bareDish, catalogContains, catalogItem, catalogSub, checkMealShape, matchDish, plannerTags, regionalDish, regionalIn, regionalMeaning, regionalWordOf, suggestable, suggestMeals, type MealKind,
   type MealTemplate } from "./kinds";
 import { BASE_TAGS } from "./db/constants";
 import { commit, getLibraryDish, getSlot, upsertLibrary, upsertSlot } from "./slotStore";
@@ -211,5 +211,52 @@ describe("regional words (decided 20)", () => {
     expect(place("Aloo curry", ["north"])).toMatchObject({ kind: "Gravy", sub: "Curry" });
     expect(place("Paneer curry", ["tamil"])).toBeNull();
     expect(matchDish("Chicken curry")?.kind).toBe("Chicken");
+  });
+});
+
+describe("bare words", () => {
+  it("a bare dosa is Plain dosa; upma, sabzi, gravy and rice curry are categories", () => {
+    expect(bareDish("Dosa")).toBe("Plain dosa");
+    expect(bareDish("Upma")).toBeNull();
+    expect(bareDish("Sabzi")).toBeNull();
+    expect(bareDish("Gravy")).toBeNull();
+    expect(bareDish("Rice curry")).toBeNull();
+    expect(bareDish("Rice curry", "Sambar")).toBeNull();
+  });
+  it("the decided words each mean one dish", () => {
+    expect(bareDish("Idli")).toBe("Idli");
+    expect(bareDish("Paratha")).toBe("Plain paratha");
+    expect(bareDish("Thepla")).toBe("Plain thepla");
+    expect(bareDish("Puttu")).toBe("Rice puttu");
+    expect(bareDish("Khichdi", "Pongal")).toBe("Ven pongal");
+    expect(bareDish("Khichdi")).toBe("Moong dal khichdi");
+    expect(bareDish("Pulao")).toBe("Vegetable pulao");
+    expect(bareDish("Kheer")).toBe("Rice kheer");
+    expect(bareDish("Rice curry", "Rasam")).toBe("Tomato rasam");
+    expect(bareDish("Rice curry", "Kootu")).toBe("Mixed vegetable kootu");
+    expect(bareDish("Porridge")).toBe("Rice kanji");
+  });
+  it("every other non-staple kind is a category, and an unknown kind has none", () => {
+    for (const w of ["Poha", "Biryani", "Raita", "Salad", "Chutney", "Halwa", "Pasta", "Noodles", "Sandwich", "Toast", "Egg"]) expect(bareDish(w)).toBeNull();
+    expect(bareDish("Rice curry", "Kadhi")).toBeNull();
+    expect(bareDish("Dal")).toBeNull();
+    expect(bareDish("Nonsense")).toBeNull();
+  });
+  it("every bare dish is an item of its own kind (and sub-kind)", () => {
+    let seen = 0;
+    for (const k of CATALOG.kinds) {
+      if (k.bare) { seen++; expect(catalogItem(k.bare)!.kind.name).toBe(k.name); }
+      for (const sb of k.subs) if (sb.bare) { seen++; const h = catalogItem(sb.bare)!; expect(h.kind.name).toBe(k.name); expect(h.item.sub).toBe(sb.name); }
+    }
+    expect(seen).toBeGreaterThan(10);
+  });
+  it("staples have no bare dish", () => {
+    for (const k of CATALOG.kinds.filter((x) => x.staple)) { expect(k.bare).toBeNull(); for (const sb of k.subs) expect(sb.bare).toBeNull(); expect(bareDish(k.name)).toBeNull(); }
+  });
+  it("the new items exist and the plain paratha is its own dish, not Lachha's other name", () => {
+    expect(catalogItem("Plain paratha")?.kind.name).toBe("Paratha");
+    expect(catalogItem("Mixed vegetable kootu")?.item.sub).toBe("Kootu");
+    expect(catalogItem("Rice kanji")?.kind.name).toBe("Porridge");
+    expect(matchDish("plain paratha")).toMatchObject({ item: "Plain paratha" });
   });
 });

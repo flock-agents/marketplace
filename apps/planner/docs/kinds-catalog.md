@@ -125,6 +125,7 @@ aka parantha, parotha, prantha, porota; north, punjab, west; complete; breakfast
 - Pyaaz paratha (onion paratha) [onion/garlic, root veg]: atta, onion; *without:* ghee, butter
 - Mixed vegetable paratha (veg paratha) [root veg]: atta, mixed vegetables; *without:* potato, carrot, ghee
 - Dal paratha: atta, chana dal; *without:* ghee
+- Plain paratha (sada paratha): atta; *without:* ghee
 - Matar paratha (peas paratha): atta, green peas; *without:* ghee
 - Sattu paratha [onion/garlic, root veg; east]: atta, sattu; *without:* onion, garlic, ghee
 - Egg paratha (anda paratha) [egg; egg, onion/garlic, root veg]: atta, egg; *without:* onion, ghee
@@ -134,7 +135,7 @@ aka parantha, parotha, prantha, porota; north, punjab, west; complete; breakfast
 - Sindhi koki (koki) [onion/garlic, root veg; sindhi]: atta; *without:* onion, ghee
 
 **Recognised only:**
-- Lachha paratha (plain paratha, tikona paratha): atta, ghee
+- Lachha paratha (tikona paratha): atta, ghee
 
 ### Thepla
 aka theplu, methi na thepla; gujarat; complete; breakfast, dinner, tiffin, snack; all: dairy, wheat
@@ -253,16 +254,17 @@ aka kochuri, kachauri; north, rajasthan, east; snack; breakfast, snack; all: whe
 - Hing kochuri [bengal]: maida, urad dal
 
 ### Porridge
-aka oats, oatmeal, dalia, daliya, ragi malt, kanji; north, west, south, continental; complete; breakfast; all: dairy, sugar
+aka oats, oatmeal, dalia, daliya, ragi malt, kanji; north, west, south, continental; complete; breakfast
 
 **Suggested:**
-- Oats porridge (oatmeal) [continental]: oats, milk; *without:* sugar
-- Overnight oats [nuts; continental]: oats, milk; *without:* sugar, honey, almonds
-- Sweet milk dalia (meetha dalia, dalia porridge) [wheat, nuts; north/west]: broken wheat, milk, sugar; *without:* almonds, cashews
-- Ragi malt (ragi porridge, ragi java, ragi kanji) [south]: ragi flour, milk; *without:* jaggery
+- Oats porridge (oatmeal) [dairy, sugar; continental]: oats, milk; *without:* sugar
+- Overnight oats [dairy, sugar, nuts; continental]: oats, milk; *without:* sugar, honey, almonds
+- Sweet milk dalia (meetha dalia, dalia porridge) [wheat, dairy, sugar, nuts; north/west]: broken wheat, milk, sugar; *without:* almonds, cashews
+- Ragi malt (ragi porridge, ragi java, ragi kanji) [dairy, sugar; south]: ragi flour, milk; *without:* jaggery
+- Rice kanji (ganji, rice porridge, arisi kanji) [rice]: rice
 
 **Suggested in its region:**
-- Lapsi (fada ni lapsi) [wheat, nuts; gujarat]: broken wheat, ghee, jaggery; *without:* almonds
+- Lapsi (fada ni lapsi) [wheat, dairy, sugar, nuts; gujarat]: broken wheat, ghee, jaggery; *without:* almonds
 
 ### Cereal
 aka cornflakes, muesli, chocos; continental; complete; breakfast; all: dairy, sugar
@@ -569,6 +571,7 @@ aka kuzhambu, kulambu, pulusu, gojju; tamil, andhra, karnataka; suggested at lun
 aka koottu; tamil, kerala; suggested at lunch, dinner
 
 **Suggested:**
+- Mixed vegetable kootu (veg kootu, mixed kootu) [coconut; tamil/kerala]: mixed vegetables, moong dal, coconut
 - Chow chow kootu [coconut; tamil/kerala]: chow chow, moong dal, coconut
 - Poricha kootu [coconut; tamil/kerala]: mixed vegetables, moong dal, coconut
 - Keerai kootu (spinach kootu) [coconut; tamil/kerala]: amaranth, moong dal, coconut

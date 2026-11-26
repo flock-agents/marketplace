@@ -91,7 +91,8 @@ K("B","Paratha","parantha; parotha; prantha; porota","north punjab west","breakf
  "Pyaaz paratha | onion paratha | w og d",
  "Mixed vegetable paratha | veg paratha | w d rv",
  "Dal paratha | | w d",
- "Lachha paratha | plain paratha; tikona paratha | w d",
+ "Plain paratha | sada paratha | w d",
+ "Lachha paratha | tikona paratha | w d",
  "Matar paratha | peas paratha | w d",
  "Sattu paratha | | w og d | east",
  "Sindhi koki | koki | w og d | sindhi",
@@ -190,6 +191,7 @@ K("B","Porridge","oats; oatmeal; dalia; daliya; ragi malt; kanji","north west so
  "Sweet milk dalia | meetha dalia; dalia porridge | w d s n | north west",
  "Ragi malt | ragi porridge; ragi java; ragi kanji | d s | south",
  "Lapsi | fada ni lapsi | w d s n | gujarat",
+ "Rice kanji | ganji; rice porridge; arisi kanji | r",
 ]);
 K("B","Cereal","cornflakes; muesli; chocos","continental","breakfast",false,"complete","veg",[
  "Cornflakes with milk | cornflakes | d s",
@@ -381,6 +383,7 @@ K("D","Kuzhambu","kulambu; kozhambu; pulusu; gojju; puli kuzhambu","tamil andhra
  "Hagalakai gojju | bitter gourd gojju | k s | karnataka",
 ]);
 K("D","Kootu","koottu; kootan","tamil kerala","lunch dinner",false,"side","veg",[
+ "Mixed vegetable kootu | veg kootu; mixed kootu | c",
  "Chow chow kootu | | c",
  "Poricha kootu | | c",
  "Keerai kootu | spinach kootu | c",
@@ -1295,6 +1298,29 @@ if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 console.log(`ingredients: ${report.lost.length} items lose an old hand tag:\n  ${report.lost.join("\n  ")}`);
 console.log(`ingredients: ${report.gained.length} items gain a safety tag (root veg, nuts, peanut, dairy, egg, meat, fish; * = leave-out-able):\n  ${report.gained.join("\n  ")}`);
 console.log(`ingredients: ${report.onion.length} more gain root_veg only from onion or garlic (the planner's root vegetables include them): ${report.onion.join(", ")}`);
+
+// A bare word's dish (owner decided: scripts/kinds/bare-decided.md): the one plain everyday item a family means by the kind's or
+// sub-kind's name alone. Every other non-staple kind and sub-kind is a category (null); staples keep their everyday item.
+const BARE = {
+  "Idli": "Idli", "Dosa": "Plain dosa", "Paratha": "Plain paratha", "Thepla": "Plain thepla", "Puttu": "Rice puttu", "Pulao": "Vegetable pulao",
+  "Kheer": "Rice kheer", "Porridge": "Rice kanji",
+  "Khichdi": "Moong dal khichdi", "Khichdi/Khichdi": "Moong dal khichdi", "Khichdi/Pongal": "Ven pongal",
+  "Rice curry/Rasam": "Tomato rasam", "Rice curry/Kootu": "Mixed vegetable kootu",
+};
+const bareUsed = new Set();
+for (const k of out.kinds) {
+  // A kind of one sub-kind: the sub-kind says what the kind does.
+  const bareOf = (key) => { if (k.staple || !BARE[key]) return null; bareUsed.add(key); return BARE[key]; };
+  k.bare = bareOf(k.name);
+  for (const sb of k.subs) {
+    sb.bare = bareOf(`${k.name}/${sb.name}`) ?? (k.subs.length === 1 ? k.bare : null);
+    const it = sb.bare && k.items.find((i) => i.name === sb.bare);
+    if (sb.bare && (!it || it.sub !== sb.name)) errors.push(`bare: ${sb.bare} is not an item of ${k.name}/${sb.name}`);
+  }
+  if (k.bare && !k.items.some((i) => i.name === k.bare)) errors.push(`bare: ${k.bare} is not an item of ${k.name}`);
+}
+for (const key of Object.keys(BARE)) if (!bareUsed.has(key)) errors.push(`bare: no kind or sub-kind ${key}`);
+if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
 
 const fs = require("fs");
 const root = process.argv[2];
