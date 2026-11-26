@@ -98,7 +98,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
       "latestVersion": "3.1.2",
-      "latestTag": "family-calendar-v3.1.2",
+      "latestTag": "family-calendar-v3.1.2-rc1",
       "minFlockVersion": "0.19.0",
       "publishedAt": "2026-08-13T15:30:00Z",
       "updatedAt": "2026-11-27T00:00:00Z"
@@ -746,7 +746,7 @@
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
       "latestVersion": "4.2.0",
-      "latestTag": "planner-v4.2.0-rc1",
+      "latestTag": "planner-v4.2.0-rc2",
       "minFlockVersion": "0.25.0-beta.8",
       "publishedAt": "2026-10-11T00:00:00Z",
       "updatedAt": "2026-11-27T00:00:00Z"
