@@ -251,7 +251,7 @@ describe("make_plan: hard rules per person, fail closed", () => {
     for (const d of k.week()) for (const x of d.dishes) if (!x.not_for.includes("Nani")) expect(x.dish).not.toMatch(/fish|chicken|mutton|prawn|rohu|macher|meen/i);
   });
 
-  it("a dish never read for her rule's item is not hers (fail closed), read first when setup never read it; she gets a dish of her own", async () => {
+  it("a dish setup never read is read first; still not known, it stays hers and she gets a dish of her own", async () => {
     const k = await home({ people, rules: [GRANDMA], slots: [MAIN[0], { name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { items: ["Mystery curry"] })] }, MAIN[2]],
       library: [{ name: "Mystery curry", slot: "Lunch", contains: [], contains_read: [] }] });
     const f = fakeModel({ contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: [] })) }) });
@@ -259,7 +259,8 @@ describe("make_plan: hard rules per person, fail closed", () => {
     expect(f.contains()[0].user.dishes).toEqual(["Mystery curry"]);
     expect(f.contains()[0].req.system).toBe(CONTAINS_SYSTEM);
     const mon = k.at(MON, "Lunch")!.dishes;
-    expect(mon.find((x) => x.dish === "Mystery curry")!.not_for).toEqual(["Nani"]);
+    // one meaning model: unknown = ask (planChecks.ruleUnknowns), never a block
+    expect(mon.find((x) => x.dish === "Mystery curry")!.not_for).toEqual([]);
     expect(mon.some((x) => x.dish !== "Rice" && !x.not_for.includes("Nani"))).toBe(true);
     if (r.ok) expect((r.unmet ?? []).filter((u) => u.includes("nothing"))).toEqual([]);
   });
@@ -411,11 +412,12 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     }
   });
 
-  it("a careful read that leaves a dish out counts as having it (fail closed)", async () => {
+  it("a careful read that leaves a dish out no longer counts as having it: the catalog's word decides", async () => {
     const k = await home({ rules: [ALLERGY], slots: [POHA_ONLY, MAIN[1], MAIN[2]], lib: { ...LIB, Breakfast: [["Kanda poha", "Poha"], ["Batata poha", "Poha"]] }, newPerWeek: 0 });
     const f = fakeModel({ careful: (u) => ({ dishes: u.dishes.filter((d: string) => d !== "Kanda poha").map((d: string) => ({ dish: d, has: [] })) }) });
     await k.plan(f.model);
-    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual(x.dish === "Kanda poha" ? ["Kabir"] : []);
+    // one meaning model: unknown = ask; the careful read is not read by the checks (Kanda poha's peanuts can be left out)
+    for (const d of WEEK) for (const x of k.at(d, "Breakfast")!.dishes) expect(x.not_for).toEqual([]);
   });
 });
 
