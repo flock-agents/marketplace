@@ -1,6 +1,7 @@
 // Eval 1's scorer on hand-made setups: each field passes on TRUTH and fails on the defect it is there to catch.
 import { describe, expect, test } from "bun:test";
-import { effective, familyWords, scoreSetup, slotMap } from "./score-setup";
+import { effective, familyWords, sameParts, scoreSetup, slotMap } from "./score-setup";
+import { cookOf } from "./adapter";
 import { setupOfTruth } from "./truth-setup";
 import { FIX, BOX_FIX } from "./test-fixture";
 import { linked, kindPart } from "./truth";
@@ -316,5 +317,47 @@ describe("scoreSetup: real_dish and a part's one dish", () => {
     expect(scoreSetup(h, s).rates.real_dish).toEqual([s.library.length, s.library.length]);
     s.library.push({ ...s.library[0], name: "Usal", slot: "Dinner" });
     expect(scoreSetup(h, s).notes).toContain("real_dish: Usal saved as a dish at Dinner: it is their word for a part");
+  });
+});
+
+// ── F9 (Task 15 G5, lead's OD5 ruling, F5 follow-on) ──
+describe("scoreSetup: F9 a named dish said alone as {kind, dish}, and a nameless cook", () => {
+  test("OD5: a saved {kind, dish: X} part matches TRUTH's items(X); a kind part without that dish, or of another dish, does not", () => {
+    const want = [{ kind: "Roti" }, { items: ["Egg curry"] }];
+    expect(sameParts(want, [{ kind: "Roti" }, { kind: "Egg", dish: "Egg curry", words: "egg curry" }])).toBe(true);
+    expect(sameParts(want, [{ kind: "Roti" }, { items: ["Egg curry"] }])).toBe(true);
+    // Bad: the kind with no dish (any egg dish), another egg dish, or the dish under a kind it is not.
+    expect(sameParts(want, [{ kind: "Roti" }, { kind: "Egg" }])).toBe(false);
+    expect(sameParts(want, [{ kind: "Roti" }, { kind: "Egg", dish: "Egg roast" }])).toBe(false);
+    expect(sameParts(want, [{ kind: "Roti" }, { kind: "Paneer", dish: "Egg curry" }])).toBe(false);
+  });
+
+  const nameless = (): { h: typeof FIX; s: SetupOut } => {
+    const h = structuredClone(FIX);
+    h.truth.cook = { ...h.truth.cook!, name: "Cook" };   // h18's TRUTH: the role word, no name said
+    const s = setupOfTruth(h);
+    s.cook = { ...s.cook!, name: null };
+    return { h, s };
+  };
+  const failing = (h: typeof FIX, s: SetupOut) => Object.entries(scoreSetup(h, s).rates).filter(([, [p, n]]) => p < n).map(([k]) => k).sort();
+  test("a nameless cook (no cook_name, her days set) loads from the house row and scores as the cook", () => {
+    expect(cookOf({ cook_name: null, cook_days: '["Mon","Tue"]', cook_arrival: '[{"meals":["Dinner"]}]' })).toEqual({ name: null, days: ["Mon", "Tue"], visits: [{ meals: ["Dinner"] }] });
+    expect(cookOf({ cook_name: "Lakshmi", cook_days: '["Mon"]', cook_arrival: "08:00" })).toEqual({ name: "Lakshmi", days: ["Mon"], visits: [{ at: "08:00" }] });
+    expect(cookOf({ cook_name: null, cook_days: null, cook_arrival: null })).toBeNull();
+    expect(cookOf({ cook_name: null, cook_days: "[]", cook_arrival: null })).toBeNull();
+    const { h, s } = nameless();
+    expect(failing(h, s)).toEqual([]);
+  });
+  test("bad: a nameless TRUTH cook saved under the role word, with the wrong days, or not at all; a named one saved nameless", () => {
+    const { h, s } = nameless();
+    expect(failing(h, { ...s, cook: { ...s.cook!, name: "cook" } })).toEqual(["cook_days"]);
+    expect(failing(h, { ...s, cook: { ...s.cook!, days: ["Mon"] } })).toEqual(["cook_days"]);
+    expect(failing(h, { ...s, cook: null })).toEqual(["cook_days", "cook_times"]);
+    const named = setupOfTruth(FIX);
+    expect(fails({ ...named, cook: { ...named.cook!, name: null } })).toEqual(["cook_days"]);
+    // A house with no paid cook: a nameless cook saved is a paid cook nobody said.
+    const none = structuredClone(FIX);
+    none.truth.cook = null;
+    expect(failing(none, { ...setupOfTruth(none), cook: { name: null, days: ["Mon"], visits: [] } })).toEqual(["cook_days"]);
   });
 });

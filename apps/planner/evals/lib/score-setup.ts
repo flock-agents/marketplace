@@ -6,7 +6,7 @@ import { canonTag, itemCovers, tagsOfName } from "./vocab";
 import { catalogKindNamed, isBareKindWord, kindOf as catalogKindOf } from "./catalog";
 import { weeklyPeople } from "./truth-setup";
 import {
-  MAIN_SLOTS, WEEK, dayOf, dishNameOf, plain, sameDays, sameFrequency, sameName, sameNames, sameSet,
+  MAIN_SLOTS, WEEK, dayOf, dishNameOf, namelessCook, plain, sameDays, sameFrequency, sameName, sameNames, sameSet,
   type Household, type TruthPart, type TruthRule, type TruthSlot, type TruthTarget, type Weekday,
 } from "./truth";
 
@@ -174,12 +174,14 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
 
   // ── Cook and family cooks ──
   if (t.cook) {
-    add("cook_days", !!s.cook && sameName(s.cook.name, t.cook.name) && sameDays(t.cook.days, s.cook.days), JSON.stringify(s.cook && { name: s.cook.name, days: s.cook.days }));
+    // A TRUTH cook named only by her role ("Cook") is nameless: the saved one must be too (spec §6.3: never a role as a name).
+    const nameOk = !!s.cook && (namelessCook(t.cook.name) ? !s.cook.name : !!s.cook.name && sameName(s.cook.name, t.cook.name));
+    add("cook_days", nameOk && sameDays(t.cook.days, s.cook!.days), JSON.stringify(s.cook && { name: s.cook.name, days: s.cook.days }));
     // A visit TRUTH gives no time for (the household did not say when she comes) is not compared; the ones with a time are.
     const timed = t.cook.visits.filter((v) => v.at);
     const visitsOk = !!s.cook && (s.cook.visits.length === t.cook.visits.length || timed.length < t.cook.visits.length) && timed.every((v) => s.cook!.visits.some((x) => x.at === v.at && sameSet(v.meals.map(lc), (x.meals ?? []).map(lc))));
     add("cook_times", visitsOk, `${JSON.stringify(s.cook?.visits)} (want ${JSON.stringify(t.cook.visits)})`);
-  } else add("cook_days", !s.cook || t.people.some((p) => sameName(p.name, s.cook!.name)), `a paid cook saved: ${s.cook?.name}`);
+  } else add("cook_days", !s.cook || (!!s.cook.name && t.people.some((p) => sameName(p.name, s.cook!.name!))), `a paid cook saved: ${s.cook?.name ?? "(no name)"}`);
   for (const fc of t.familyCooks) {
     const days = fc.days.filter((d) => !t.cook?.days.includes(d));
     const ok = days.every((d) => s.family_cooks.some((x) => sameName(x.person, fc.person) && x.days.map(dayOf).includes(d)));
@@ -325,6 +327,12 @@ export function sameParts(want: readonly (TruthPart | SavedPart)[], got: readonl
   if (want.length !== got.length) return false;
   const key = (p: TruthPart | SavedPart) => ("items" in p ? "items" : "from" in p ? `from ${lc(p.from)} ${lc(p.kind ?? "")}` : lc(p.kind));
   const fits = (w: TruthPart | SavedPart, g: TruthPart | SavedPart): boolean => {
+    // Lead's OD5 ruling: a named catalog dish said alone ("egg curry on saturdays") may be saved {kind, dish} (its kind's other
+    // items offered as new): it is TRUTH's items(X) when its dish is X and its kind is X's (catalog or none known).
+    if ("items" in w && "kind" in g && !("from" in g) && g.dish) {
+      const k = catalogKindOf(g.dish)?.kind;
+      return w.items.some((x) => plain(x) === plain(g.dish!)) && (!k || lc(k) === lc(g.kind));
+    }
     if (key(w) !== key(g)) return false;
     if ("items" in w) return w.items.some((x) => !!dishNameOf(x, (g as { items: string[] }).items));
     if ("from" in w) return true;

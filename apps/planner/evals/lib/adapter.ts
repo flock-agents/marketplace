@@ -61,12 +61,11 @@ export function readSetup(k: Kit, res: any = {}): SetupOut {
   const dishes = has(k, "slot_dishes") ? k.rows("slot_dishes") : [];
   const seed = days.filter((d) => !d.date).map((d) => ({ slot: d.slot, dishes: dishesOf(dishes, d.id) }));
   const house = has(k, "house") ? k.rows("house")[0] ?? {} : {};
-  const visits = json<any>(house.cook_arrival, null);
   const state = json<any>(house.setup_state, {}) ?? {};
   return {
     ok: res?.ok !== false,
     slots, library, rules, seed,
-    cook: house.cook_name ? { name: house.cook_name, days: json(house.cook_days, []), visits: Array.isArray(visits) ? visits : visits ? [{ at: String(visits) }] : typeof house.cook_arrival === "string" ? [{ at: house.cook_arrival }] : [] } : null,
+    cook: cookOf(house),
     family_cooks: json(res?.family_cooks ?? res?.read?.family_cooks ?? state.family_cooks ?? house.family_cooks, []),
     unplaced: [...json<any[]>(res?.unplaced ?? res?.read?.unplaced, []), ...json<any[]>(res?.noted, []).map((n) => (typeof n === "string" ? { text: n } : n))],
     lunch_unclear: json(res?.lunch_unclear ?? res?.read?.lunch_unclear ?? state.lunch_unclear, []),
@@ -75,6 +74,14 @@ export function readSetup(k: Kit, res: any = {}): SetupOut {
     settings: { new_dishes_per_week: settingOf(k, "new_dishes_per_week") ?? 2 },
     ...("cuisines" in house ? { cuisines: json<string[] | null>(house.cuisines, null) } : {}),
   };
+}
+
+/** The cook from the house row: by her name, or (a cook the family named by her role only, spec §6.3) by her days alone. */
+export function cookOf(house: Record<string, any>): SetupOut["cook"] {
+  const days = json<string[]>(house.cook_days, []);
+  if (!house.cook_name && !days.length) return null;
+  const visits = json<any>(house.cook_arrival, null);
+  return { name: house.cook_name || null, days, visits: Array.isArray(visits) ? visits : visits ? [{ at: String(visits) }] : typeof house.cook_arrival === "string" ? [{ at: house.cook_arrival }] : [] };
 }
 
 const dishesOf = (rows: any[], id: string) => rows.filter((x) => x.slot_day_id === id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map((x) => x.dish as string);

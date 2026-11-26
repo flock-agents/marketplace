@@ -39,7 +39,8 @@ export type SetupOut = {
   library: SavedDish[];
   rules: SavedRule[];
   seed: SavedSeed[];
-  cook: { name: string; days: string[]; visits: { at?: string; meals?: string[] }[] } | null;
+  /** `name` null: a cook the family named by her role only (spec §6.3: never a role as a name); her days say she is there. */
+  cook: { name: string | null; days: string[]; visits: { at?: string; meals?: string[] }[] } | null;
   family_cooks: { person: string; days: string[] }[];
   /** spec §4.1 rules.unplaced + the read-back's "noted, not checked". */
   unplaced: { text: string; quote?: string }[];

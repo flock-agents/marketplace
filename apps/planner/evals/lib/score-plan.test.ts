@@ -6,7 +6,7 @@ import { setupOfTruth, perturb } from "./truth-setup";
 import { staplesOf } from "./history";
 import { baselineWeek } from "./baseline";
 import { PLAN_FIX as FIX, BOX_FIX } from "./test-fixture";
-import { avoid, dateOf, type Weekday } from "./truth";
+import { avoid, dateOf, dish, items, kindPart, linked, tpl, type Household, type Weekday } from "./truth";
 import type { PlanOut, SavedDish } from "./result";
 import { BASE_TAGS } from "./vocab";
 
@@ -739,3 +739,148 @@ describe("scorePlan: one meaning model", () => {
     expect(e("Fri", "Chotu's lunch box")).toBeUndefined();
   });
 });
+
+
+// ── F9 (Task 15 G5): the scorer reads links, newness, category words, fixed extras and staple parts as the spec means them.
+// Each relaxed check has a really bad week beside it that still fails.
+describe("scorePlan: F9 links, newness, categories, fixed extras, staples", () => {
+  const sdOf = (p: PlanOut, day: Weekday, slot: string) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+  const notesOf = (h: Household, p: PlanOut, l: ReturnType<typeof setupOfTruth>, field: string) => scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith(`${field}:`));
+  const BOXDAYS: Weekday[] = ["Mon", "Tue", "Wed", "Thu"];
+
+  // Chotu's breakfast box is the family's breakfast (a whole-plate link, spec §5.4), Mon–Thu. Breakfast's own parts are
+  // categories (Poha, Upma, Idli); the planner fills Mon's poha with Matar poha (a category item: theirs, saved
+  // suggested:false with origin planner_suggested, makePlan.ts), and the e2e eval loads plan.library (eval-e2e.ts).
+  const BB: Household = (() => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.slots.push({ name: "Chotu's breakfast box", kind: "custom", usual_people: ["Chotu"], days: BOXDAYS, replaces: "Breakfast", match: /breakfast box/i });
+    h.truth.meals = [...(h.truth.meals ?? []), { slot: "Breakfast", templates: [tpl([kindPart("Poha")]), tpl([kindPart("Upma")]), tpl([kindPart("Idli")])] },
+      { slot: "Chotu's breakfast box", templates: [tpl([linked("Breakfast")])] }];
+    return h;
+  })();
+  const bbWeek = (boxMon = "Matar poha") => {
+    const p = goodWeek();
+    sdOf(p, "Mon", "Breakfast").dishes = [{ name: "Matar poha" }];
+    for (const day of BOXDAYS) {
+      const b = sdOf(p, day, "Breakfast");
+      b.people = b.people.filter((x) => x !== "Chotu");
+      p.slotDays.push({ date: dateOf(MON, day), slot: "Chotu's breakfast box", people: ["Chotu"], guests: [], skip: null, dishes: day === "Mon" ? [{ name: boxMon }] : b.dishes.map((d) => ({ ...d })) });
+    }
+    p.library.push({ ...newRow("Matar poha", "Breakfast", ["peas"]), suggested: false, untried: false });
+    return p;
+  };
+  const e2eLoaded = (h: Household, p: PlanOut) => ({ ...setupOfTruth(h), library: p.library });
+
+  test("(1) a box dish equal to its linked meal's dish that day passes from_library and is neither new nor a new kind", () => {
+    const p = bbWeek();
+    const l = e2eLoaded(BB, p);
+    expect(notesOf(BB, p, l, "from_library").filter((n) => /breakfast box/.test(n))).toEqual([]);
+    expect(notesOf(BB, p, l, "no_new_kind").filter((n) => /breakfast box/.test(n))).toEqual([]);
+    expect(scorePlan(BB, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("new_budget") && /matar poha/i.test(n))).toEqual([]);
+  });
+  test("(1) bad: a box dish the linked meal did not have that day is still not from the box's library and a new kind", () => {
+    const p = bbWeek("Macaroni");
+    const l = e2eLoaded(BB, p);
+    expect(notesOf(BB, p, l, "from_library").some((n) => /Mon Chotu's breakfast box: Macaroni/.test(n))).toBe(true);
+    expect(notesOf(BB, p, l, "no_new_kind").some((n) => /Macaroni/.test(n))).toBe(true);
+    expect(notesOf(BB, p, l, "linked_parts").length).toBeGreaterThan(0);
+  });
+
+  test("(2) newness is the dish's own flag or a suggested library row: 3 new dishes count 3 even when the loaded library holds them", () => {
+    const p = goodWeek();
+    for (const [day, name] of [["Mon", "Rava upma"], ["Tue", "Semiya upma"], ["Thu", "Kanda poha"]] as [Weekday, string][]) {
+      sdOf(p, day, "Breakfast").dishes = [{ name, new: true }];
+      p.library.push(newRow(name, "Breakfast", []));
+    }
+    const s = scorePlan(FIX, p, { ...loaded(), library: p.library }, { failClosed: false });
+    // Rava idli, Bajra roti (goodWeek's own two) and these three.
+    expect(s.facts.new_dishes).toBe(5);
+    expect(s.rates.new_budget).toEqual([0, 1]);
+  });
+  test("(2) a category item saved suggested:false (origin planner_suggested) is not new", () => {
+    const p = bbWeek();
+    expect(scorePlan(BB, p, e2eLoaded(BB, p), { failClosed: false }).facts.new_dishes).toBe(2);
+  });
+
+  test("(3) a named dish is no category: Methi paratha at dinner is not counted as 'Egg paratha roll sometimes'", () => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.library.push(...dish("Egg paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }));
+    const p = boxWeek4();
+    for (const day of ["Mon", "Wed", "Fri"] as Weekday[]) sdOf(p, day, "Dinner").dishes.push({ name: "Methi paratha", new: true });
+    expect(notesOf(h, p, setupOfTruth(h), "dish_frequency").filter((n) => /Egg paratha roll/.test(n))).toEqual([]);
+    // Bad: the roll itself on all four box days is past "sometimes".
+    for (const day of BOXDAYS) sdOf(p, day, "Chotu's lunch box").dishes = [{ name: "Egg paratha roll" }];
+    expect(notesOf(h, p, setupOfTruth(h), "dish_frequency").filter((n) => /Egg paratha roll/.test(n))).toHaveLength(1);
+  });
+
+  test("(4) linked_parts skips a box day whose plate is an items template's (Egg paratha roll), not one with a wrong sabzi", () => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.meals![0].templates.push(tpl([items("Egg paratha roll")], "sometimes"));
+    h.truth.library.push(...dish("Egg paratha roll", ["Chotu's lunch box"], { frequency: "sometimes" }));
+    const p = boxWeek4();
+    // Tuesday's lunch sabzi is Aloo gobi; the roll day has none of it.
+    sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Egg paratha roll" }];
+    const r = scorePlan(h, p, setupOfTruth(h), { failClosed: false }).rates.linked_parts;
+    expect(r[0]).toBe(r[1]);
+    // Bad: the roll beside a sabzi lunch did not have, and the paratha with the wrong sabzi (Monday's lunch has Bhindi).
+    sdOf(p, "Tue", "Chotu's lunch box").dishes = [{ name: "Egg paratha roll" }, { name: "Bhindi" }];
+    sdOf(p, "Mon", "Chotu's lunch box").dishes = [{ name: "Paratha roll" }, { name: "Aloo gobi" }];
+    expect(notesOf(h, p, setupOfTruth(h), "linked_parts").map((n) => n.slice(14, 35))).toEqual(["Mon Chotu's lunch box", "Tue Chotu's lunch box"]);
+  });
+
+  test("(5) a fixed dish of a slot's only template ('4 eggs' every school day) is exempt from not_next_day and no_early_repeat", () => {
+    const h = structuredClone(BOX_FIX);
+    h.truth.library = h.truth.library.map((d) => (d.name === "Cucumber salad" ? { name: d.name, slot: d.slot } : d));
+    h.truth.library.push(...dish("4 eggs", ["Asha's lunch extras"]));
+    h.truth.meals!.push({ slot: "Asha's lunch extras", templates: [tpl([items("4 eggs"), kindPart("Salad", { words: "salad" })])] });
+    const p = boxWeek4();
+    const salads = ["Cucumber salad", "Kachumber salad", "Cucumber salad", "Kachumber salad", "Cucumber salad"];
+    (["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]).forEach((day, i) => { sdOf(p, day, "Asha's lunch extras").dishes = [{ name: "4 eggs" }, { name: salads[i] }]; });
+    const rot = (q: PlanOut) => scorePlan(h, q, setupOfTruth(h), { failClosed: false }).notes.filter((n) => /^(not_next_day|no_early_repeat):/.test(n) && /lunch extras/i.test(n));
+    expect(rot(p)).toEqual([]);
+    // Bad: the salad (a kind part, it rotates) the same two days running still fails.
+    sdOf(p, "Tue", "Asha's lunch extras").dishes = [{ name: "4 eggs" }, { name: "Cucumber salad" }];
+    expect(rot(p).some((n) => /Cucumber salad/.test(n))).toBe(true);
+    expect(rot(p).some((n) => /4 eggs/.test(n))).toBe(false);
+  });
+
+  test("(6) an item filling a template's staple-kind part (Rice of [Rice, Rasam]) passes from_library; at a meal with no such part it fails", () => {
+    const h = structuredClone(FIX);
+    h.truth.meals = [{ slot: "Dinner", staples: ["Rice"], templates: [tpl(["Rice", "Dal"])] }];
+    const p = goodWeek();
+    sdOf(p, "Mon", "Dinner").dishes = [{ name: "Rice" }, { name: "Toor dal" }];
+    const lib = (q: PlanOut) => notesOf(h, q, setupOfTruth(h), "from_library");
+    expect(lib(p)).toEqual([]);
+    // Bad: rice at breakfast, where no template has a Rice part.
+    sdOf(p, "Wed", "Breakfast").dishes = [{ name: "Rice" }];
+    expect(lib(p).some((n) => /Wed Breakfast: Rice/.test(n))).toBe(true);
+  });
+
+  test("(7) no_new_kind reads a family dish's saved kind before the catalog name ('Bread omlette', their spelling, an Egg)", () => {
+    const h = structuredClone(FIX);
+    h.truth.library.push(...dish("Bread omelette", ["Breakfast"], { days: ["Sun"] }));
+    const p = goodWeek();
+    sdOf(p, "Sun", "Breakfast").dishes = [{ name: "Bread omlette" }];
+    const l = setupOfTruth(h);
+    l.library.push({ slot: "Breakfast", name: "Bread omlette", frequency: null, days: ["Sun"], contains: ["egg", "wheat"], contains_read: read, origin: "setup_named", kind: "Egg", sub: "Eggs" });
+    expect(scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind") && /omlette/.test(n))).toEqual([]);
+    // Bad: a dish nobody saved and the catalog cannot place still fails.
+    sdOf(p, "Sat", "Breakfast").dishes = [{ name: "Zorba special", new: true }];
+    expect(scorePlan(h, p, l, { failClosed: false }).notes.filter((n) => n.startsWith("no_new_kind") && /Zorba/.test(n))).toHaveLength(1);
+  });
+});
+
+/** BOX_FIX's good box week for another household of the same shape (the box rolls the lunch sabzi Mon–Thu). */
+function boxWeek4(): PlanOut {
+  const p = goodWeek(), BOXD: Weekday[] = ["Mon", "Tue", "Wed", "Thu"];
+  const sdOf = (day: Weekday, slot: string) => p.slotDays.find((x) => x.date === dateOf(MON, day) && x.slot === slot)!;
+  for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri"] as Weekday[]) {
+    const lunch = sdOf(day, "Lunch");
+    lunch.people = [...lunch.people.filter((x) => x !== "Chotu" || !BOXD.includes(day)), ...(lunch.people.includes("Asha") ? [] : ["Asha"])];
+    if (BOXD.includes(day)) p.slotDays.push({ date: dateOf(MON, day), slot: "Chotu's lunch box", people: ["Chotu"], guests: [], skip: null,
+      dishes: [{ name: "Paratha roll" }, ...lunch.dishes.filter((d) => ["Bhindi", "Aloo gobi"].includes(d.name)).map((d) => ({ name: d.name }))] });
+    p.slotDays.push({ date: dateOf(MON, day), slot: "Asha's lunch extras", people: ["Asha"], guests: [], skip: null, dishes: [{ name: "Cucumber salad" }] });
+  }
+  for (const day of ["Tue", "Thu"] as Weekday[]) sdOf(day, "Dinner").dishes.push({ name: "Plain paratha", for_people: ["Dadu Ram"] } as any);
+  return p;
+}

@@ -3,7 +3,7 @@
 import type { SavedDish, SavedMealKind, SavedRule, SavedSlot, SavedTarget, SavedTemplate, SetupOut } from "./result";
 import { catalogKindNamed, kindOf } from "./catalog";
 import { BASE_TAGS, canonTag, tagsOfName, withParents } from "./vocab";
-import { MAIN_SLOTS, WEEK, sameName, type Household, type TruthDish, type TruthMeal, type TruthSlot, type TruthTarget, type Weekday } from "./truth";
+import { MAIN_SLOTS, WEEK, namelessCook, sameName, type Household, type TruthDish, type TruthMeal, type TruthSlot, type TruthTarget, type Weekday } from "./truth";
 
 /** The tags of a truth dish: its name's, plus its overrides, minus what it lacks. */
 export function truthTags(d: TruthDish): Set<string> {
@@ -119,7 +119,8 @@ export function setupOfTruth(h: Household): SetupOut {
     slots: slots.map((s): SavedSlot => { const shape = mealShape(h, s.name); return { name: s.name, kind: s.kind, addon_of: s.addon_of ?? null, usual_people: s.usual_people ?? [], days: s.days ?? [], skip_days: s.skip_days ?? [],
       ...(s.extras ? { extras: true } : {}), ...(slotOrder(h, s) ? { order: slotOrder(h, s) } : {}), ...(shape ? shape : {}) }; }),
     library, rules, seed: t.seed.map((x) => ({ slot: x.slot, dishes: [...x.dishes] })),
-    cook: t.cook ? { name: t.cook.name, days: t.cook.days, visits: t.cook.visits } : null,
+    // A cook with no name said is saved without one (setup keeps her by her days, spec §6.3).
+    cook: t.cook ? { name: namelessCook(t.cook.name) ? null : t.cook.name, days: t.cook.days, visits: t.cook.visits } : null,
     family_cooks: t.familyCooks, unplaced: (t.noted ?? []).map((n) => ({ text: quoteOf(h, n.re), quote: quoteOf(h, n.re) })),
     lunch_unclear: t.lunchUnclear ?? [], attendance, settings: { new_dishes_per_week: 2 },
     ...(t.cuisines ? { cuisines: [...t.cuisines] } : {}),

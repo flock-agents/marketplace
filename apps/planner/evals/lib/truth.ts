@@ -25,6 +25,8 @@ export const MAIN_SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 export type TruthPerson = { name: string; group: Group; age?: number };
 /** `at` is optional: a visit the household states by its meals only (h18's cook comes with no time said). */
 export type TruthCook = { name: string; days: Weekday[]; visits: { at?: string; meals: string[] }[] };
+/** A TRUTH cook "named" only by her role ("Cook", h18): no name was said (spec §6.3: never a role as a name). */
+export const namelessCook = (name: string | null | undefined): boolean => !name || /^(the |our |your )?cook$/i.test(name.trim());
 
 /** A slot (spec `slots`). `usual_people` omitted = everyone at home; `days` omitted = every day. `match`: how a saved
  *  custom/add-on slot's name is recognised (a main slot by its exact name). `optional`: Eval 1 neither requires nor

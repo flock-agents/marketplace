@@ -6,7 +6,7 @@ import { meanDishes, staplesOf, type HistoryRow } from "./history";
 import { truthTags, weeklyPeople } from "./truth-setup";
 import { canonTag, hasItem, PARENT, tagsOfName } from "./vocab";
 import { slotMap, type Rates } from "./score-setup";
-import { catalogKindNamed, isBareKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
+import { catalogKindNamed, isBareKindWord, isKindWord, isStapleKind, kindOf, mainTagsOf } from "./catalog";
 import {
   WEEK, dateOf, dayOf, dishNameOf, frequencyRange, plain, sameName, sameNames, schoolLunchAway, weekdayOfDate,
   type Household, type Skip, type TruthDish, type TruthPart, type TruthRule, type TruthSlot, type TruthTarget, type Weekday,
@@ -108,6 +108,30 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const hasWord = (x: string, list: readonly string[]) => words(x).some((w) => list.includes(w));
   // One staple word ("Rice", "Phulka"), or plain or steamed rice; "Curd rice" is a dish.
   const isBareStapleName = (x: string) => { const w = words(x); return (w.length === 1 && PLAIN_STAPLES.includes(w[0])) || (w.length === 2 && ["plain", "steamed"].includes(w[0]) && PLAIN_STAPLES.includes(w[1])); };
+  /** TRUTH's templates at a slot. */
+  const truthTemplates = (slot: string) => (t.meals ?? []).filter((m) => lc(m.slot) === lc(slot)).flatMap((m) => m.templates);
+  /** A dish a linked part put there (spec §5.4): the item the linked meal has that day (of the part's kind, or its whole plate),
+   *  when that meal is cooked. It is the linked meal's dish, judged there: never the box's own library row, new dish, new kind
+   *  or separate repeat. */
+  const linkedDish = (sd: PlanSlotDay, name: string): boolean => truthTemplates(sd.slot).some((tp) => tp.parts.some((p) => {
+    if (!("from" in p)) return false;
+    const src = at(sd.date, p.from);
+    if (!src || src.skip || !src.dishes.some((d) => plain(d.name) === plain(name))) return false;
+    const row = t.library.find((d) => plain(d.name) === plain(name));
+    return !p.kind || [row?.kind, kindOf(name)?.kind].some((k) => !!k && lc(k) === lc(p.kind!));
+  }));
+  /** A fixed dish of every template of its slot ("4 eggs" in the only template of Shiva's lunch box): there every day by
+   *  meaning (spec §5.1 items: fixed dishes, nothing suggested), so not rotated. */
+  const fixedEveryDay = (slot: string, name: string): boolean => {
+    const ts = truthTemplates(slot);
+    return ts.length > 0 && ts.every((tp) => tp.parts.some((p) => "items" in p && p.items.some((it) => plain(it) === plain(name) || dishNameOf(name, [it]) === it)));
+  };
+  /** An item filling a template's staple-kind part ("Rice" of [Rice, Rasam], meal staples Rice): the family's (spec §5.1). */
+  const fillsStaplePart = (slot: string, name: string): boolean => {
+    const meal = (t.meals ?? []).find((m) => lc(m.slot) === lc(slot)), k = kindOf(name)?.kind;
+    return !!k && !!meal?.staples?.some((x) => lc(x) === lc(k))
+      && meal.templates.some((tp) => tp.parts.some((p) => "kind" in p && !("from" in p) && lc(p.kind) === lc(k)));
+  };
 
   // ── 1. Slot-days: filled, skips kept, nothing stray, the right people ──
   for (const e of exp) {
@@ -231,9 +255,13 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   const newSlot = new Map<string, string>();   // new dish → the first slot it is placed at
   for (const sd of cooked) for (const d of sd.dishes) {
     const inLib = loaded.library.some((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name));
-    const isNew = !!d.new || plan.library.some((x) => plain(x.name) === plain(d.name) && x.origin === "planner_suggested");
-    if (isNew && !inLib) { newNames.add(plain(d.name)); if (!newSlot.has(plain(d.name))) newSlot.set(plain(d.name), sd.slot); }
-    add("from_library", inLib || isStaple(sd.slot, d.name) || isNew, `${dayOfSd(sd)} ${sd.slot}: ${d.name} is not in ${sd.slot}'s library`);
+    // New = the planner's own flag on the dish, or a suggested library row (an offered dish). Never `origin`: a category item
+    // (Matar poha of their "poha") is saved with origin planner_suggested and suggested:false, and is theirs (spec §5.1). A new
+    // dish counts whether or not the loaded library holds it (the end-to-end eval loads the library after planning).
+    const isNew = !!d.new || plan.library.some((x) => plain(x.name) === plain(d.name) && x.suggested === true);
+    const link = linkedDish(sd, d.name);
+    if (isNew && !link) { newNames.add(plain(d.name)); if (!newSlot.has(plain(d.name))) newSlot.set(plain(d.name), sd.slot); }
+    add("from_library", inLib || isStaple(sd.slot, d.name) || isNew || link || fillsStaplePart(sd.slot, d.name), `${dayOfSd(sd)} ${sd.slot}: ${d.name} is not in ${sd.slot}'s library`);
   }
   // Owner 24 Nov (spec §5.2): a slot short of known dishes, which the planner asks the family about, gets its own new dishes
   // for its shortfall, beside the setting: its places (cooked slot-days × its usual non-staple count) less what its known
@@ -263,7 +291,8 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // about a dish still limits it.
   // Owner rule 3 (class 1): words said of a category ("pasta on Sundays", "kurma twice a week": a kind or sub-kind's own word,
   // no one dish) hold for every item of it, whatever its name ("Macaroni" is a pasta).
-  const categoryOf = (name: string) => { const k = kindOf(name); return k && k.by !== "item" && !isStapleKind(k.kind) ? k : null; };
+  // Only a kind's or sub-kind's own word is a category; a named dish that holds one ("Egg paratha roll", "Rasam rice") is that dish.
+  const categoryOf = (name: string) => { const k = isKindWord(name) ? kindOf(name) : null; return k && k.by !== "item" && !isStapleKind(k.kind) ? k : null; };
   const placements = (name: string) => {
     const cat = categoryOf(name);
     const isIt = (x: string) => { if (dishNameOf(x, truthNames) === name) return true; const k = cat && kindOf(x); return !!k && k.kind === cat!.kind && (!cat!.sub || k.sub === cat!.sub); };
@@ -327,7 +356,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   type Use = { date: string; slot: string; id: string; name: string; kind: string | null };
   const uses: Use[] = [];
   for (const sd of cooked) for (const d of sd.dishes) {
-    if (exempt(sd.slot, d.name)) continue;
+    if (exempt(sd.slot, d.name) || fixedEveryDay(sd.slot, d.name) || linkedDish(sd, d.name)) continue;
     uses.push({ date: sd.date, slot: sd.slot, id: plain(d.name).replace(/\bvegetable\b/g, "veg"), name: d.name, kind: kindAt(d.name, sd.slot) });
   }
   const groupOf = (u: Use) => (LD.includes(lc(u.slot)) && sharedLD(u.kind) ? "Lunch+Dinner" : u.slot);
@@ -400,7 +429,7 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     ? p.items.some((it) => plain(it) === plain(x) || dishNameOf(x, [it]) === it)
     : "from" in p ? !p.kind || kindsHere(x, slot).has(p.kind)
     : kindsHere(x, slot).has(p.kind));
-  const matchesTemplate = (ds: string[], slot: string) => (mealOf(slot)?.templates ?? []).some((tp) => {
+  const matchesTemplate = (ds: string[], slot: string, tps = mealOf(slot)?.templates ?? []) => tps.some((tp) => {
     const used = new Set<number>();
     return tp.parts.every((p) => { const i = ds.findIndex((x, j) => !used.has(j) && partHit(p, x, slot)); if (i < 0) return false; used.add(i); return true; });
   });
@@ -487,9 +516,11 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
   // A new dish the catalog cannot place fails (nothing says it is like theirs).
   const seenNew = new Set<string>();
   for (const sd of cooked) for (const d of sd.dishes) {
-    if (own(d.name, sd.slot) || exempt(sd.slot, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
+    if (own(d.name, sd.slot) || exempt(sd.slot, d.name) || linkedDish(sd, d.name) || seenNew.has(`${lc(sd.slot)}|${plain(d.name)}`)) continue;
     seenNew.add(`${lc(sd.slot)}|${plain(d.name)}`);
-    const k = kindOf(d.name)?.kind ?? null, theirs = famKinds(sd.slot);
+    // The family's saved dish row says its kind (spec §5.2: the part's saved kind, never re-read): "Bread omlette", their spelling.
+    const saved = loaded.library.find((x) => lc(x.slot) === lc(sd.slot) && plain(x.name) === plain(d.name) && x.kind);
+    const k = saved?.kind ?? kindOf(d.name)?.kind ?? null, theirs = famKinds(sd.slot);
     add("no_new_kind", !!k && theirs.has(k), `${sd.slot}: ${d.name} is ${k ? `a ${k}` : "of no kind the catalog knows"}${k ? `; their ${sd.slot} kinds: ${[...theirs].join(", ")}` : ""}`);
   }
   // Nobody without food: no "nothing to eat" left, and a fasting person's food is there.
@@ -515,7 +546,12 @@ export function scorePlan(h: Household, plan0: PlanOut, loaded: SetupOut, o: { f
     if (!("from" in p)) continue;
     const sub = p.sub, ofKind = (sd: PlanSlotDay) => (p.kind ? sd.dishes.filter((d) => kindsHere(d.name, sd.slot).has(p.kind!)
       && (!sub || !kindOf(d.name)?.sub || lc(kindOf(d.name)!.sub!) === lc(sub))) : sd.dishes);
+    // A day whose plate is a link-free template's ("Egg paratha roll" of the sometimes template) did not use the link.
+    const linkFree = meal.templates.filter((x) => !x.parts.some((q) => "from" in q));
+    const ofLinkFree = (sd: PlanSlotDay) => { const ds = sd.dishes.filter((d) => !d.for_people?.length).map((d) => d.name);
+      return linkFree.some((x) => x.parts.length === ds.length && matchesTemplate(ds, sd.slot, [x])); };
     for (const sd of cooked.filter((x) => lc(x.slot) === lc(meal.slot))) {
+      if (ofLinkFree(sd)) continue;
       const src = at(sd.date, p.from);
       if (!src || src.skip || !src.dishes.length) continue;
       const have = new Set(sd.dishes.map((d) => plain(d.name))), mine = ofKind(sd).map((d) => plain(d.name)), want = ofKind(src).map((d) => plain(d.name));

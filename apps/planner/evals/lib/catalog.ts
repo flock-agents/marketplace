@@ -82,6 +82,15 @@ export function isBareKindWord(name: string): boolean {
   return exact.length > 0 && !exact.some((e) => e.hit.by === "item") && exact.every((e) => COARSE.has(e.hit.kind));
 }
 
+/** The whole name is a kind's or sub-kind's own word (any kind: "Pasta", "Uthappam", "Sambar"), and no item's: a category
+ *  word, never a named dish that only holds one ("Egg paratha roll", "Rasam rice"). */
+export function isKindWord(name: string): boolean {
+  const n = key(name);
+  if (!n) return false;
+  const exact = entries.filter((e) => e.words === n);
+  return exact.length > 0 && !exact.some((e) => e.hit.by === "item");
+}
+
 /** The catalog's cuisine words. */
 export const CUISINES: string[] = [...new Set(CAT.kinds.flatMap((k) => [...k.cuisines, ...k.subs.flatMap((s) => s.cuisines), ...k.items.flatMap((i) => i.cuisines ?? [])]))].sort();
 
