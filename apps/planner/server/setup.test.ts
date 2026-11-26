@@ -1497,6 +1497,15 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(JSON.stringify(home.schema)).toContain('"extras":{"type":"boolean"}');
     expect(home.system).toContain("extras: true");
   });
+  it("teach a box that is the home meal as made (a whole link) and a box dish made with a home part (its base and a link) (G2)", () => {
+    const dishes = SETUP_PARTS.find((p) => p.id === "dishes")!.system;
+    expect(dishes).toContain(`A box that has the home meal as it is made is a link with kind_words "", never its dishes; a dish named with a part of the home meal ("akki roti folded over the day's sabzi") is the box's own bread or base and a link of that part: the part's words are never in a dish name.`);
+    // One worked example of each shape, in a made-up family's words: no library or seed row for the whole-meal box.
+    expect(dishes).toContain(`links [["Ira's morning box", "Breakfast", "", "Ira's morning box is our breakfast, just as it's made"], ["Ira's lunch box", "Lunch", "sabzi", "akki roti folded over that day's sabzi"]]`);
+    expect(dishes).toContain(`library [["Akki roti", "Ira's lunch box", "akki roti folded over that day's sabzi"]]`);
+    expect(dishes).not.toContain(`"Ira's morning box", "Akki`);
+    for (const w of ["has what we have", "for the whole family", "share of our morning plate"]) expect(dishes.toLowerCase(), w).not.toContain(w);
+  });
 });
 
 describe("apply_setup v2: the prompts", () => {
@@ -1542,7 +1551,7 @@ describe("apply_setup v2: the prompts", () => {
     expect(often).toContain("A dish said with weekdays and a frequency word keeps both: its frequency and its days");
     expect(often).toContain("A dish told in any reply has its row");
     // Review: no trigger phrase or sentence shape lifted from an eval household.
-    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside", "what we make for"]) {
+    for (const w of ["in case we make", "when we make", "who eats differently", "egg inside", "pancakes", "rest of us rotis", "rolled with", "cheese inside", "paneer inside", "what we make for", "has what we have", "for the whole family", "puri wrapped", "puri sabzi", "sabji that we make"]) {
       expect(rules.toLowerCase(), w).not.toContain(w);
       expect(often.toLowerCase(), w).not.toContain(w);
       expect(dishes.toLowerCase(), w).not.toContain(w);
