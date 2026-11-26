@@ -2536,6 +2536,7 @@
           ],
           "diet": "veg",
           "suggest": true,
+          "nocook": true,
           "sub": "Paratha"
         },
         {
@@ -5886,6 +5887,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Eggs"
         },
         {
@@ -21558,6 +21560,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21589,6 +21592,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21621,6 +21625,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21650,6 +21655,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21677,6 +21683,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21694,6 +21701,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21711,6 +21719,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21727,6 +21736,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21744,6 +21754,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21767,6 +21778,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21783,6 +21795,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         },
         {
@@ -21810,6 +21823,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Salad"
         }
       ],
@@ -22996,6 +23010,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Fruit"
         },
         {
@@ -23009,6 +23024,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Fruit"
         },
         {
@@ -23022,6 +23038,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Fruit"
         },
         {
@@ -23035,6 +23052,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Fruit"
         },
         {
@@ -23062,6 +23080,7 @@
             }
           ],
           "suggest": true,
+          "nocook": true,
           "sub": "Fruit"
         }
       ],

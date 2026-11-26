@@ -13,7 +13,7 @@ import type { Weekday } from "./dates";
 export type CatalogIngredient = { name: string; main: boolean };
 /** `contains` is derived from all its ingredients, `contains_main` from its main ones (scripts/kinds/ingredients.js). */
 export type CatalogItem = { name: string; aka?: string[]; cuisines?: string[]; contains: string[]; contains_main: string[]; ingredients: CatalogIngredient[];
-  suggest: boolean; regional?: boolean; sub: string; diet?: string; meals?: string[] };
+  suggest: boolean; regional?: boolean; /** Needs no cooking (salad, fruit, boiled eggs): a cook's visit cap does not count it (owner decision OD6, 26 Nov). */ nocook?: boolean; sub: string; diet?: string; meals?: string[] };
 /** `bare`: the one dish a family means by the word alone ("dosa" is Plain dosa), or null when the word is a category that rotates through the items. */
 export type CatalogSub = { name: string; aka: string[]; cuisines: string[]; meals: string[]; bare: string | null };
 export type CatalogKind = { name: string; aka: string[]; cuisines: string[]; meals: string[]; staple: boolean; part: string; diet: string; bare: string | null;

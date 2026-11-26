@@ -990,12 +990,42 @@ describe("per-person versions of a shared meal (§5.4) and the cook's visit (§9
     }
     expect(oneDish).toBeGreaterThan(0);
     // A week where no template fits: every part kept, the day said.
-    const forced = [breakfast(T({ kind: "Idli", dish: "Idli" }, { kind: "Chutney" })), lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" }, { kind: "Curd" })),
+    const forced = [breakfast(T({ kind: "Idli", dish: "Idli" }, { kind: "Chutney" })), lunch(T({ kind: "Rice" }, { kind: "Dal" }, { kind: "Sabzi" }, { kind: "Sabzi" }, { kind: "Curd" })),
       bBox([T({ from: "Breakfast" })]), lBox([T({ from: "Lunch", kind: "Sabzi" })])];
+    // Rice and Curd are staples (OD6): of Idli, Chutney, Dal, 2 Sabzi the cook makes 5.
     const f = run({ slots: forced, library: LIB, days: daysFor(forced), visits: [visit] });
-    expect(f.unmet).toContain("Mon breakfast and lunch: 6 dishes to cook, more than the cook's 4");
-    for (const d of WEEK.slice(0, 6)) { expect(plate(f, d, "Breakfast")).toHaveLength(2); expect(plate(f, d, "Lunch")).toHaveLength(4); }
+    expect(f.unmet).toContain("Mon breakfast and lunch: 5 dishes to cook, more than the cook's 4");
+    for (const d of WEEK.slice(0, 6)) { expect(plate(f, d, "Breakfast")).toHaveLength(2); expect(plate(f, d, "Lunch")).toHaveLength(5); }
     // Sunday is not one of the visit's days.
     expect(f.unmet.some((u) => u.startsWith("Sun ") && u.includes("dishes to cook"))).toBe(false);
+  });
+  describe("the cook's visit counts cooked dishes only (owner decision OD6, 26 Nov)", () => {
+    const visit: Visit = { cook: null, meals: ["Breakfast", "Lunch", "Agastya's lunch box"], cap: 4, days: ["Mon", "Tue", "Wed", "Thu", "Fri"], label: "breakfast and lunch" };
+    const KLIB = [...LIB, dish("Upma", "Breakfast", "Upma"), dish("Plain paratha", "Agastya's lunch box", "Paratha", { catalog_item: "Plain paratha" }),
+      dish("4 eggs", "Shiva's lunch box", null)];
+    const extras = (...parts: MealTemplate["parts"]) => slot("Shiva's lunch box", { kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Shiva"], days: [...SCHOOL], extras: true, templates: [T(...parts)] });
+    const lines = (r: ReturnType<typeof run>) => r.unmet.filter((u) => u.includes("dishes to cook"));
+    it("the owner's weekday morning: breakfast 1, rice + sabzi + sambar, plain paratha + linked sabzi, extras of 4 eggs + salad: no over-limit line", () => {
+      const slots = [breakfast(T({ kind: "Upma" })), lunch(T({ kind: "Rice" }, { kind: "Sabzi" }, { kind: "Dal" })),
+        lBox([T({ items: ["Plain paratha"] }, { from: "Lunch", kind: "Sabzi" })]), extras({ items: ["4 eggs"] }, { kind: "Salad" })];
+      const r = run({ slots, library: KLIB, days: daysFor(slots), newCap: 0, visits: [visit] });
+      expect(plate(r, WEEK[0], "Agastya's lunch box")).toHaveLength(2);
+      expect(plate(r, WEEK[0], "Shiva's lunch box")).toHaveLength(2);
+      expect(lines(r)).toEqual([]);
+    });
+    it("a morning that really has 5 cooked dishes still gets the line", () => {
+      const slots = [breakfast(T({ kind: "Upma" }, { kind: "Sabzi" })), lunch(T({ kind: "Rice" }, { kind: "Sabzi" }, { kind: "Dal" }, { kind: "Dal" }, { kind: "Curd" }))];
+      const r = run({ slots, library: KLIB, days: daysFor(slots), newCap: 0, visits: [visit] });
+      expect(lines(r)).toContain("Mon breakfast and lunch: 5 dishes to cook, more than the cook's 4");
+    });
+    it("staples and no-cook items do not count, a family's own uncatalogued dish does, a linked dish once", () => {
+      const slots = [breakfast(T({ kind: "Upma" }, { kind: "Sabzi" }, { kind: "Dal" })), lunch(T({ kind: "Rice" }, { kind: "Curd" }, { kind: "Salad" }, { kind: "Fruit" }, { items: ["Boiled eggs"] })),
+        lBox([T({ items: ["Plain paratha"] }, { from: "Breakfast", kind: "Sabzi" })])];
+      const ok = run({ slots, library: KLIB, days: daysFor(slots), newCap: 0, visits: [visit] });
+      expect(lines(ok)).toEqual([]);   // 3 cooked at breakfast; the linked sabzi once; the rest skipped
+      const own = [breakfast(T({ kind: "Upma" }, { kind: "Sabzi" }, { kind: "Dal" })), lunch(T({ kind: "Rice" }, { kind: "Sabzi" }, { items: ["4 eggs"] }))];
+      const r = run({ slots: own, library: KLIB, days: daysFor(own), newCap: 0, visits: [visit] });
+      expect(lines(r)).toContain("Mon breakfast and lunch: 5 dishes to cook, more than the cook's 4");
+    });
   });
 });

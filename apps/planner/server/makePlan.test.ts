@@ -522,9 +522,9 @@ describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
     expect((await k.op("set_cook", { name: "Savita", days: ["Mon", "Tue", "Wed", "Thu", "Fri"], arrival: [{ at: "08:00", meals: ["Breakfast", "Lunch"] }, { at: "17:00", meals: ["Dinner"] }] })).house.cook_visits).toHaveLength(2);
     const r = await k.plan(fakeModel().model);
     if (!r.ok) throw new Error(r.say);
-    // Breakfast's dish and lunch's rice, dal and sabzi: 4, over her 2 on her days only; no part dropped.
+    // Breakfast's dish and lunch's dal and sabzi: 3 (rice is a staple, OD6), over her 2 on her days only; no part dropped.
     expect(r.unmet!.filter((u) => u.includes("dishes to cook, more than"))).toEqual(
-      ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => `${d} breakfast and lunch: 4 dishes to cook, more than Savita's 2`));
+      ["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => `${d} breakfast and lunch: 3 dishes to cook, more than Savita's 2`));
     expect(r.message).toContain("dishes to cook, more than Savita's 2");
     expect(k.dishesAt(MON, "Lunch")).toHaveLength(3);
   });
