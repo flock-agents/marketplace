@@ -79,7 +79,8 @@ export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredi
 /** A rule's targets as saved, else derived from what/items (veg → meat, fish + items; no_eggs → egg + items; egg → items or meat, fish). */
 export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
   if (r.targets) return r.targets;
-  const items = (r.items ?? []).flatMap(resolveTargets);
+  // Only an exclusion also targets the ingredient of a kind word ("no rice"); a swap, only or require rule keeps the one target.
+  const items = (r.items ?? []).flatMap(r.what === "swap" || r.what === "only" || r.what === "require" ? (w: string) => [resolveTarget(w)] : resolveTargets);
   const ing = (...tags: string[]): RuleTarget[] => tags.map((tag) => ({ type: "ingredient", tag }));
   const out = r.what === "veg" ? [...ing("meat", "fish"), ...items]
     : r.what === "no_eggs" ? [...ing("egg"), ...items]

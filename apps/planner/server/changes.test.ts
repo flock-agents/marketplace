@@ -199,6 +199,12 @@ describe("set_rule", () => {
     expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }, { type: "ingredient", tag: "rice" }]);
   });
 
+  it("a require rule on rice saves only the kind target", async () => {
+    const k = await planned();
+    const r = await k.op("set_rule", { hard: true, what: "require", items: ["rice"], slots: ["Dinner"], quote: "rice every dinner" });
+    expect(r.rule.targets).toEqual([{ type: "kind", kind: "Rice" }]);
+  });
+
   it("set_rule saves typed targets from the agent's items and to", async () => {
     const k = await planned();
     await k.op("set_person", { name: "Agastya", group: "child" });

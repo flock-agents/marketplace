@@ -4,7 +4,7 @@
 import { describe, expect, it } from "bun:test";
 import { allergyNotes, checkSlot, forbidden, leaveOutNotes, mostlyOnion, notFor, onionNotes, placeOfDish, ruleBreaks, ruleUnknowns, slotFacts, swapNotes, swapsAt, vouched, type Proposal, type Week } from "./planChecks";
 import { dishKey } from "./dishText";
-import { resolveTargets } from "./targets";
+import { resolveTarget, resolveTargets } from "./targets";
 import type { PlanDay } from "./planDays";
 import type { HistoryRow, LibraryDish, Rule, Slot } from "./slotStore";
 
@@ -213,6 +213,17 @@ describe("one meaning model checks", () => {
       expect(notFor(w, d, "Amma's kurma")).toEqual([]);
       expect(ruleUnknowns(w, d, "Amma's kurma").map((u) => [u.who, u.tag, u.date])).toEqual([[GS, "maida", d.date]]);
     }
+  });
+});
+
+describe("a swap on rice stays on the Rice kind (G4 review)", () => {
+  it("does not fire on Curd rice (kind Curd), fires on Rice", () => {
+    const swap = rule({ who: "Ravi", what: "swap", slots: ["Dinner"], items: ["rice"], to: "ragi mudde", targets: [resolveTarget("rice")], gives: { type: "item", item: "Ragi mudde", kind: null }, quote: "ragi mudde for rice" });
+    const lib = [dish("Curd rice", "Dinner", { kind: "Curd", contains: ["rice", "curd"], contains_read: [...READ, "rice", "curd"] }), dish("Rice", "Dinner", { kind: "Rice" })];
+    const w = week({ slots: [slot("Dinner", { order: 30 })], library: lib, rules: [swap] });
+    const d = w.days.find((x) => x.slot === "Dinner")!;
+    expect(swapsAt(w, d, "Curd rice")).toEqual([]);
+    expect(swapsAt(w, d, "Rice").length).toBe(1);
   });
 });
 
