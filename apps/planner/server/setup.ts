@@ -120,12 +120,14 @@ const OFTEN_EXAMPLE = `gives often [["Pulao", "Lunch", "Pulao twice", "twice", "
 
 const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${EXAMPLE}\n${example}\n${NOT_THE_EXAMPLE}`;
 
-/** The four readers. `need`: the setup fails without this part; the dishes and how often may come back empty (said, not saved). */
+/** The four readers. `need`: the setup fails without this part; the dishes and how often may come back empty (said, not saved).
+ *  `tier`: the dishes read copies the family's words out, so it reads on fast (no reasoning): on balanced its reasoning ran into
+ *  the token cap and cut the JSON off, twice in some setups (eval 2026-11-25: 3–11 s on fast vs 18–146 s, 94% vs 78% overall). */
 export const SETUP_PARTS = [
-  { id: "home", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
-  { id: "rules", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
-  { id: "dishes", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
-  { id: "often", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
+  { id: "home", tier: "balanced", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
+  { id: "rules", tier: "balanced", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
+  { id: "dishes", tier: "fast", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
+  { id: "often", tier: "balanced", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
 ] as const;
 
 export const CONTAINS_SYSTEM = `For each dish, say for each tag whether the dish as usually cooked in an Indian home has it: true or false, for every tag asked, for every dish. Answer as { "<dish name as given>": { "<tag>": true | false } }.
@@ -423,6 +425,14 @@ export const ruleKey = (r: Pick<ReadRule, "what" | "who" | "items" | "slots" | "
 
 export type Checked = { read: SetupRead; dropped: string[]; asks: string[]; noted: string[]; lint: ReadDish[]; slotDays: Map<string, Weekday[]> };
 
+/** Whether a note's words are the cook's own limit or words about the cook (its words hold the cook's limit, or the other way round). */
+function aboutTheCook(quote: string, cook: SetupRead["cook"]): boolean {
+  const norm = (t: string | null | undefined) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const q = norm(quote);
+  if (!q || !cook) return false;
+  return [cook.limits_words, cook.quote].map(norm).some((c) => c.length >= 8 && (q.includes(c) || c.includes(q)));
+}
+
 /** The read made safe to store: what the family did not say is dropped, unknown names are asked, slots resolved. */
 export function checkRead(read: SetupRead, ctx: { household: Household; said: string[]; sentences?: string[] }): Checked {
   const dropped: string[] = [], asks: string[] = [], noted: string[] = [], lint: ReadDish[] = [];
@@ -479,6 +489,9 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     if (r.what !== "cap") r.per_meal = null;
     const need = NEEDS[r.what];
     if (need && !need(r)) { dropped.push(`${what}: not complete for a ${r.what} rule, kept as a note`); r = { ...r, what: "note", items: null, to: null, per_meal: null, fasting_food: null }; }
+    // A note that is only the cook's limit again ("Yes, she has two hours, so 3 to 4 dishes in all"): the cook keeps it, not
+    // the family's notes (onboarding run 24 showed it under "All week" in the plan).
+    if (r.what === "note" && !r.who && aboutTheCook(r.quote, read.cook)) { dropped.push(`${what}: the cook's limit, kept with the cook`); continue; }
     if (rules.some((x) => ruleKey(x) === ruleKey(r))) continue;
     rules.push(r);
   }
@@ -853,6 +866,9 @@ export function readBack(db: Db, household: Household, extra: { noted: string[];
   const by = new Map<string, string[]>();
   for (const r of rules) { const k = r.who ?? "Everyone"; by.set(k, [...(by.get(k) ?? []), ruleSaid(r)]); }
   if (by.size) lines.push(`Food rules:\n${[...by].map(([who, rs]) => `- ${who}: ${rs.join("; ")}`).join("\n")}`);
+  // The family's own dishes per meal, so a meal read wrong or left out (run 28: the adults' dinner never asked) is seen here.
+  const dishLines = slots.map((s) => [s.name, saved.library.filter((d) => same(d.slot, s.name)).map((d) => d.name)] as const).filter(([, ds]) => ds.length);
+  if (dishLines.length) lines.push(`Your usual dishes:\n${dishLines.map(([slot, ds]) => `- ${slot}: ${ds.join(", ")}`).join("\n")}`);
   const daily = saved.library.filter((d) => d.frequency === "daily").map((d) => `${d.name.toLowerCase()} at ${mealWord(d.slot)}`);
   if (daily.length) lines.push(`Every day: ${andWords(daily)}.`);
   const noted = uniq([...saved.rules.filter((r) => r.what === "note").map((r) => `${r.who ? `${r.who}: ` : ""}${ruleSaid(r)}`), ...(state?.noted ?? []), ...extra.noted]);
@@ -893,7 +909,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
 
   // 1. The four reads at once.
   const results = await Promise.all(SETUP_PARTS.map(async (part): Promise<ModelResult> => {
-    const r = await askOnce(deps.model, { tier: "balanced", purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens }, until, log,
+    const r = await askOnce(deps.model, { tier: part.tier, purpose: part.purpose, system: part.system, user, schema: part.schema, maxTokens: part.maxTokens }, until, log,
       (x) => (x.ok && part.id === "dishes" && !arr(isObject(x.json) ? x.json.library : null).length ? { ok: false, code: "invalid_output", message: "no dishes in the answer" } : x));
     log(`${part.id}: model ${r.ok ? `ok (${r.model})` : `${r.code}: ${r.message.slice(0, 300)}`} in ${Date.now() - t0} ms`);
     return r;

@@ -4,7 +4,7 @@
 // days and how often, counted across all slots; the repeat window (staples exempt), and no main twice a day across main
 // slots; soft rules within their counts. The feasibility check says up front where the library is too thin, and relaxes in
 // a fixed order. Rotation fills a slot-day that still fails from the slot's own dishes. Pure: no database, no model.
-import { BASE_TAGS, DEFAULT_DISH_DAYS, FREQUENCY_DAYS, REPEAT_WINDOW_DAYS, REPEAT_WINDOW_RELAXED, STAPLES_FROM_PLANNED, TAG_PARENT,
+import { BASE_TAGS, DEFAULT_DISH_DAYS, FREQUENCY_DAYS, REPEAT_WINDOW_DAYS, REPEAT_WINDOW_RELAXED, STAPLE_DISHES, STAPLES_FROM_PLANNED, TAG_PARENT,
   UNTRIED_MAX_OFFERS, type Frequency } from "./db/constants";
 import { addDays, weekdayOf } from "./dates";
 import { dishKey } from "./dishText";
@@ -83,7 +83,11 @@ export function slotFacts(slot: Slot, library: LibraryDish[], history: HistoryRo
   const mine = library.filter((d) => same(d.slot, slot.name));
   const daily = mine.filter((d) => d.frequency === "daily" && plannable(d)).map((d) => d.name);
   const fromHistory = staples(stapleRows(history));
-  const all = uniq([...fromHistory, ...daily].map((x) => x)).filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
+  // The bread, rice or curd on the family's own plates here is a staple of the slot, however few plates there are (run 28:
+  // two lunch plates, "Roti, Sabzi" and "Dal, Rice, Sabzi, Curd", left roti a dish for two days a week and lunch came bare).
+  const stapleWords = new Set<string>(STAPLE_DISHES.map((x) => dishKey(x)));
+  const onPlates = looksLikeRows(history).flatMap((r) => r.dishes.map((d) => d.dish)).filter((x) => stapleWords.has(dishKey(x)));
+  const all = uniq([...fromHistory, ...daily, ...onPlates].map((x) => x)).filter((x, i, xs) => xs.findIndex((y) => dishKey(y) === dishKey(x)) === i);
   const keys = new Set(all.map(dishKey));
   const rows = looksLikeRows(history);
   const counts = rows.map((r) => r.dishes.filter((d) => !keys.has(dishKey(d.dish))).length).sort((a, b) => a - b);
@@ -120,6 +124,25 @@ const standing = (w: Week, slot: string, dish: string): boolean => {
   const row = libAt(w, slot, dish);
   return !!row && !row.frequency && !row.days?.length;
 };
+
+/** A dish that is one of the family's own entry made a particular way: its name keeps every word of the entry's and adds to it
+ *  ("Bhindi sabzi" of "Sabzi", "Moong dal" of "Dal", "Idli with coconut chutney" of "Idli with chutney"), or the same dish
+ *  with another accompaniment ("Idli with tomato chutney" of "Idli with coconut chutney"). The slot call
+ *  names it so, with the entry as its `like`; it is the family's dish, not a new one. */
+export function isVariantOf(entry: string, dish: string): boolean {
+  const words = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const e = words(entry), d = words(dish);
+  if (e.length > 0 && d.length > e.length && e.every((x) => d.includes(x))) return true;
+  // The same dish with another accompaniment: "Idli with tomato chutney" of their "Idli with coconut chutney".
+  const main = (w: string[]) => (w.includes("with") ? w.slice(0, w.indexOf("with")).join(" ") : null);
+  const em = main(e), dm = main(d);
+  return !!em && em === dm && e.join(" ") !== d.join(" ");
+}
+/** The library row a variant plans as: the entry's own row (its how often and days) under the variant's name, read afresh
+ *  for what it contains; never saved to the library. */
+export const variantRow = (entry: LibraryDish, name: string): LibraryDish => ({ ...entry, id: `variant:${dishKey(name)}`, key: dishKey(name), name,
+  contains: [], contains_read: [], suggested: false, untried: false, offers: 0, rating: null, rating_note: null, rated_on: null, rated_by: null, ratings: [] });
+export const isVariantRow = (d: LibraryDish): boolean => d.id.startsWith("variant:");
 
 /** What a dish contains and was read for, at a slot: its library row there, else any row of it, else a read made this run. */
 export function factsOf(w: Week, slot: string, dish: string): DishFacts {

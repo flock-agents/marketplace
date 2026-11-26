@@ -62,14 +62,14 @@ export const spend = { calls: 0, in: 0, out: 0, cost: 0 };
 
 /** One chat completion. `noThink`: reasoning { enabled: false } (a gateway route set to reasoning "off"); otherwise the
  *  model thinks as it likes. Tried 4 times on a transport error or an empty answer. */
-export async function chat(o: { model: string; system: string; user: string; maxTokens: number; temperature: number; noThink?: boolean; usage?: Usage }): Promise<string> {
+export async function chat(o: { model: string; system: string; user: string; maxTokens: number; temperature: number; noThink?: boolean; reasoning?: object; usage?: Usage }): Promise<string> {
   let last = "";
   for (let i = 0; i < 4; i++) {
     try {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { authorization: `Bearer ${KEY()}`, "content-type": "application/json" },
         body: JSON.stringify({ model: o.model, max_tokens: o.maxTokens, temperature: o.temperature, messages: [{ role: "system", content: o.system }, { role: "user", content: o.user }],
-          usage: { include: true }, ...(o.noThink ? { reasoning: { enabled: false } } : {}) }),
+          usage: { include: true }, ...(o.reasoning ? { reasoning: o.reasoning } : o.noThink ? { reasoning: { enabled: false } } : {}) }),
         signal: AbortSignal.timeout(390_000),
       });
       const j: any = await r.json();
@@ -88,9 +88,12 @@ export type CallRow = { purpose: string; tier: string; ms: number; ok: boolean; 
 
 /** The app's ModelCall as Flock gives it, over OpenRouter: `upstream` per tier, temperature 0.4, the schema in the system
  *  prompt, one retry on an answer that is not JSON or does not fit. Every call is logged to `sink`. */
-export function appModel(o: { upstream: { balanced: string; fast: string }; noThink?: boolean; sink?: { push: (row: CallRow) => unknown }; onFail?: (req: ModelRequest, r: Extract<ModelResult, { ok: false }>) => void }) {
-  return async (req: ModelRequest): Promise<ModelResult> => {
+export function appModel(o: { upstream: { balanced: string; fast: string }; noThink?: boolean; prodTiers?: boolean; retier?: (req: ModelRequest) => ModelRequest; sink?: { push: (row: CallRow) => unknown }; onFail?: (req: ModelRequest, r: Extract<ModelResult, { ok: false }>) => void }) {
+  return async (req0: ModelRequest): Promise<ModelResult> => {
+    const req = o.retier ? o.retier(req0) : req0;
     const t0 = Date.now(), upstream = o.upstream[req.tier];
+    // As Flock's own routes run them: balanced thinks a little (reasoning low), fast does not think.
+    const reasoning = o.prodTiers ? (req.tier === "fast" ? { enabled: false } : { effort: "low" }) : undefined;
     const system = req.schema ? `${req.system}\n\nOutput ONLY one JSON value matching this JSON Schema: no prose, no code fence.\n${JSON.stringify(req.schema)}` : req.system;
     let problem = "", attempts = 0;
     const usage: Usage = { out: 0, think: 0, cost: 0 };
@@ -104,7 +107,7 @@ export function appModel(o: { upstream: { balanced: string; fast: string }; noTh
       let text: string;
       try {
         text = await chat({ model: upstream, system, user: attempt === 0 ? req.user : `${req.user}\n\nYour last output could not be used (${problem}). Output only the JSON.`,
-          maxTokens: Math.min(req.maxTokens ?? 4000, 16000), temperature: 0.4, noThink: o.noThink, usage });
+          maxTokens: Math.min(req.maxTokens ?? 4000, 16000), temperature: 0.4, noThink: o.noThink, reasoning, usage });
       } catch (e) { return done({ ok: false, code: "unavailable", message: String(e) }); }
       if (!req.schema) return done({ ok: true, text, model: upstream });
       let json: unknown;

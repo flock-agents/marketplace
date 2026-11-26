@@ -7,6 +7,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { boot } from "./testkit";
 import { CONTAINS_SYSTEM, FIX_SYSTEM, INGREDIENT_SYSTEM, makePlan, SLOT_SYSTEM } from "./makePlan";
+import { isVariantOf } from "./planChecks";
 import { EVENTS_SYSTEM, lunchSaid, platformPeers, readHousehold, withLunchSaid, type CalendarEvent } from "./planDays";
 import type { ModelRequest, ModelResult } from "./model";
 import { addRule, commit, getLibraryDish, listSlotDays, saveSlotDay, upsertLibrary, upsertSlot, type LibraryInput, type RuleInput, type SlotInput } from "./slotStore";
@@ -128,6 +129,15 @@ describe("make_plan v2: a week that passes", () => {
 });
 
 describe("make_plan v2: history (spec §2.2)", () => {
+  it("the bread and rice on the family's own plates are staples however few plates there are (onboarding run 28)", async () => {
+    const k = await home({ seed: [{ slot: "Lunch", dishes: ["Roti", "Sabzi"] }, { slot: "Lunch", dishes: ["Dal", "Rice", "Sabzi", "Curd"] }] });
+    const f = fakeModel();
+    await k.plan(f.model);
+    const u = reqOf(f, "Lunch");
+    expect(u.staples).toEqual(expect.arrayContaining(["Roti", "Rice", "Curd"]));
+    expect(u.staples).not.toContain("Sabzi");
+    expect(u.library.map((d: any) => d.dish)).not.toContain("Roti");
+  });
   it("looks_like holds only the seed and confirmed rows; recent includes planned ones; staples come from confirmed rows only", async () => {
     const k = await home({
       seed: [{ slot: "Lunch", dishes: ["Rice", "Dal", "Curd"] }],
@@ -144,8 +154,9 @@ describe("make_plan v2: history (spec §2.2)", () => {
     expect(u.looks_like).toEqual(["Rice, Khichdi", "Rice, Sambar", "Rice, Dal, Curd"]);
     expect(u.looks_like.join(" ")).not.toContain("Paneer");
     expect(u.recent).toEqual({ "2026-11-27": ["Rice", "Khichdi"], "2026-11-28": ["Roti", "Paneer"], "2026-11-29": ["Roti", "Chole"] });
-    // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does.
-    expect(u.staples).toEqual(["Rice"]);
+    // Roti is in 2 of 5 history rows, but planned rows never feed staples: Rice (3 of 3 seed and confirmed rows) does, and
+    // Curd, a staple word on the seed's own plate.
+    expect(u.staples).toEqual(["Rice", "Curd"]);
     // Chole was shown on Sunday: on Monday it is within 3 days of itself, so code swaps it in its place (not sent back).
     const g = fakeModel({ slot: (x) => x.slot === "Lunch" ? { days: Object.fromEntries(x.days.map((d: any, i: number) => [d.date, ["Rice", ["Chole", "Rajma", "Kadhi", "Sambar"][i % 4]]])) } : rotateDays(x) });
     await k.plan(g.model);
@@ -283,6 +294,20 @@ describe("make_plan v2: hard rules per person, fail closed", () => {
       expect(ds.length).toBe(1);
     }
     if (r.ok) expect(r.relaxed).toEqual({ "Ravi's breakfast": 2 });
+  });
+
+  it("library dishes setup never read are read before the week is planned, so they are not all failed closed (onboarding run 26)", async () => {
+    const k = await home({ people, rules: [{ hard: true, what: "veg", quote: "we are vegetarian" }],
+      library: Object.entries(LIB).flatMap(([slot, names]) => names.map((name) => ({ name, slot, contains: [], contains_read: [] }))) });
+    const f = fakeModel({ slot: rotateDays, contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: ["egg", "meat", "fish", "onion_garlic"] })) }) });
+    const r = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    const first = f.contains()[0];
+    expect(first.user.dishes).toEqual(expect.arrayContaining(["Poha", "Sambar", "Palak paneer"]));
+    // Everyone has their dishes: none is "not for" anyone for want of a read.
+    expect(k.at(MON, "Breakfast")!.dishes.every((d) => d.not_for.length === 0)).toBe(true);
+    if (r.ok) expect(r.unmet ?? []).toEqual([]);
+    expect(getLibraryDish(k.kit.db, "Poha", "Breakfast")!.contains_read.sort()).toEqual(["egg", "fish", "meat", "onion_garlic"]);
   });
 
   it("a new dish gets a contains read before the check, for the rules' tags and the base ones; what it has is saved on its library row", async () => {
@@ -635,5 +660,74 @@ describe("make_plan v2: guards", () => {
       for (const r of src.match(/\/\^?\(?[^/\n*][^/\n]*\/[gimsuy]*\.test|new RegExp\([^)]*\)|\/[^/\n]+\/[gimsuy]*(?=\.test|,\s*"|\))/g) ?? [])
         expect(r, `${file}: ${r}`).not.toMatch(/monday|tuesday|\bmon\b|\bsun\b|weekend|amma|papa|nani|mother|father|\bless\b|\bmore\b/i);
     }
+  });
+});
+
+
+describe("a plan note that explains itself", () => {
+  it("is left out: it is never a word for someone at the table (onboarding run 24)", async () => {
+    const { explainsItself } = await import("./makePlan");
+    expect(explainsItself("Gowri Shankar fasting, no onion garlic; Idli is safe, Chutney avoided by him")).toBe(true);
+    expect(explainsItself("Swapped poha for upma because of the rule")).toBe(true);
+    expect(explainsItself("millet rice for one person only")).toBe(false);
+    expect(explainsItself("less oil for Dad")).toBe(false);
+  });
+});
+
+// Onboarding run 28: "Sabzi" and "Dal" were the family's own lunch dishes; a particular sabzi each day was a new dish, over the
+// new-dish limit, so lunch came as "Sabzi" or without one. A particular way of their entry is their dish.
+describe("make_plan: a particular way of a family's dish", () => {
+  it("is a variant when it keeps every word of their name and adds to it", () => {
+    expect(isVariantOf("Sabzi", "Bhindi sabzi")).toBe(true);
+    expect(isVariantOf("Dal", "Moong dal")).toBe(true);
+    expect(isVariantOf("Idli with chutney", "Idli with coconut chutney")).toBe(true);
+    expect(isVariantOf("Sabzi", "Sabzi")).toBe(false);
+    expect(isVariantOf("Sabzi", "Paneer tikka")).toBe(false);
+    expect(isVariantOf("Idli with chutney", "Coconut chutney")).toBe(false);
+    // The same dish with another accompaniment.
+    expect(isVariantOf("Idli with coconut chutney", "Idli with tomato chutney")).toBe(true);
+    expect(isVariantOf("Idli with coconut chutney", "Dosa with coconut chutney")).toBe(false);
+    expect(isVariantOf("Bhindi sabzi", "Aloo gobi sabzi")).toBe(false);
+  });
+
+  it("plans as their dish: not new, not over the limit, its contents read, never saved to the library", async () => {
+    const VEG = ["Bhindi", "Aloo gobi", "Lauki", "Beans", "Cabbage", "Tinda", "Karela"];
+    const k = await home({ lib: { Breakfast: ["Poha", "Upma", "Idli", "Dosa"], Lunch: ["Rice", "Sabzi"], Dinner: ["Palak paneer", "Aloo gobi", "Bhindi", "Dal makhani"] },
+      seed: [{ slot: "Lunch", dishes: ["Rice", "Sabzi"] }], newPerWeek: 1, rules: [{ hard: true, what: "veg", who: null, quote: "we are vegetarian" }] });
+    const f = fakeModel({
+      slot: (u) => u.slot !== "Lunch" ? rotateDays(u) : {
+        days: Object.fromEntries(u.days.filter((d: any) => !d.skip).map((d: any, i: number) => [d.date, ["Rice", `${VEG[i]} sabzi`]])),
+        new: VEG.map((v) => ({ dish: `${v} sabzi`, why: "their sabzi", like: "Sabzi" })) },
+      contains: (u) => ({ dishes: u.dishes.map((d: string) => ({ dish: d, has: [], not: u.tags })) }),
+    });
+    const r: any = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    expect(k.dishesAt(WEEK[0], "Lunch")).toEqual(["Rice", "Bhindi sabzi"]);
+    expect(k.dishesAt(WEEK[2], "Lunch")).toEqual(["Rice", "Lauki sabzi"]);
+    expect(f.fixes().filter((c) => c.user.slot === "Lunch")).toHaveLength(0);
+    expect((r.new_dishes ?? []).map((d: any) => d.name)).not.toContain("Bhindi sabzi");
+    expect(k.at(WEEK[0], "Lunch")!.dishes.find((d) => d.dish === "Bhindi sabzi")!.new).toBe(false);
+    expect(f.contains().flatMap((c) => c.user.dishes)).toContain("Bhindi sabzi");
+    expect(k.rows("library").map((x: any) => x.name)).not.toContain("Bhindi sabzi");
+  });
+});
+
+describe("make_plan: a meal with no dishes known (stage 25 Nov)", () => {
+  it("is left out of the week and asked about in the message; the other meals are planned", async () => {
+    const k = await home({ slots: [...MAIN, { name: "Kabir's tiffin", kind: "custom", order: 20, usual_people: ["Kabir"], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] }] });
+    const f = fakeModel();
+    const r = await k.plan(f.model);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error();
+    expect(f.slots().map((c) => c.user.slot)).toEqual(["Breakfast", "Lunch", "Dinner"]);
+    expect(k.week().filter((d) => d.slot === "Kabir's tiffin")).toHaveLength(0);
+    expect(k.week().filter((d) => d.slot !== "Kabir's tiffin")).toHaveLength(21);
+    expect(r.asked).toEqual(["I don't know any dishes for Kabir's tiffin yet, so it's not in this week's plan. What does Kabir usually have for it? Or should I suggest some?"]);
+    expect(r.message).toContain("I don't know any dishes for Kabir's tiffin yet");
+  });
+  it("still refuses when no meal is known at all", async () => {
+    const k = await home({ lib: {} });
+    const r = await k.plan(fakeModel().model);
+    expect(r).toMatchObject({ ok: false, reason: "no_dishes" });
   });
 });

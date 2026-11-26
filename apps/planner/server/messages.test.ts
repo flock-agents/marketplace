@@ -69,7 +69,7 @@ describe("weekMessage", () => {
 describe("introText", () => {
   it("is the how-to-use message with the real times and the real everyday items", () => {
     expect(introText(TIMES, ["milk", "curd"])).toBe([
-      "Your week is planned. How it works:",
+      "How it works:",
       "• Every Sunday morning I plan the week. Change any meal by telling me, or in the app (Week).",
       "• Every day at 3 I check tonight's dinner and at 7 tomorrow's meals; each time I put what is due in the cart, like your milk and curd, and mention anything that may be running low. Reply and I order it together. Nothing is ordered until you reply.",
       "• Saw a recipe on Instagram or YouTube? Share it here and say \"save this\"; I'll keep it and can plan it in.",
