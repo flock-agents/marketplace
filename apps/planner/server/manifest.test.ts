@@ -79,6 +79,13 @@ describe("the agent's interface", () => {
     expect(d).not.toContain("change or take off a line of the cart being ordered");
   });
 
+  it("the interview uses the weekly pattern the lunch question is built from", () => {
+    const uses: string[] = manifest.setupOptions.uses;
+    expect(uses).toContain("household.weekly");
+    for (const f of ["household.people", "household.children", "household.elders", "household.help", "household.mealsBy", "household.groceriesBy"]) expect(uses, f).toContain(f);
+    expect(uses.filter((f) => f.startsWith("household.school"))).toEqual([]);
+  });
+
   it("the Pantry page has its label and the cook is never he or she", () => {
     expect(manifest.labels["nav.pantry"]).toBe("Pantry");
     expect(manifest.labels["title.pantry"]).toBe("Pantry");

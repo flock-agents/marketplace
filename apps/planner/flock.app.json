@@ -161,7 +161,8 @@
       "household.elders",
       "household.help",
       "household.mealsBy",
-      "household.groceriesBy"
+      "household.groceriesBy",
+      "household.weekly"
     ],
     "connectors": [
       "zepto",
