@@ -73,18 +73,19 @@ export function platesOf(name: string, among: string[]): string[] | null {
   const parts = words.length >= 2 ? cover(0) : null;
   return parts && uniq(parts.map(dishKey)).length >= 2 ? parts : null;
 }
-/** Whether a name is only a list of catalog kind names ("Dal roti sabzi"): never an own kind (J11). */
+/** Whether a name is only a list of three or more distinct catalog kind names ("Dal roti sabzi"): never an own kind (J11). Two kinds
+ *  ("Curd rice", "Sabzi pulao") are real dishes. */
 export const isKindList = (name: string): boolean => {
   if (matchDish(name)) return false;
   const kinds = CATALOG.kinds.map((k) => plainWords(k.name).split(" ").filter(Boolean)).sort((a, b) => b.length - a.length);
   const words = plainWords(name).split(" ").filter((w) => w && !PLATE_CONNECTORS.includes(w));
-  let n = 0;
+  const seen = new Set<string>();
   for (let i = 0; i < words.length;) {
     const k = kinds.find((w) => w.every((x, j) => words[i + j] === x));
     if (!k) return false;
-    i += k.length; n++;
+    i += k.length; seen.add(k.join(" "));
   }
-  return n >= 2;
+  return seen.size >= 3;
 };
 
 /** What a meal eaten in place of a main meal has of that meal (H3): all of it as made, one part of it, or nothing. */
@@ -1710,7 +1711,7 @@ export function placeOf(ask: KindsAsk, x: Record<string, unknown>, word: string)
   const k = x.own === true ? null : catalogKind(str(x.kind));
   if (!k) {
     const same = catalogKind(ask.name);
-    // A name that is only a list of catalog kinds ("Dal roti sabzi") is no own kind: unplaced, so it is asked (J11).
+    // A name that is only a list of catalog kinds ("Dal roti sabzi") is no own kind: it is saved unplaced (kind null), never as a kind of its own (J11).
     if (!same && isKindList(ask.name)) return { kind: null, sub: null, item: null, own: false, named: "dish", word };
     return same ? { kind: same.name, sub: soleSub(same), item: null, own: false, named, word } : { kind: ask.name.trim(), sub: null, item: null, own: true, named: "dish", word };
   }

@@ -1880,6 +1880,8 @@ describe("setup checks what a read left out (H1-H3)", () => {
     });
     it("placeOf: a kind-list name is not an own kind", () => {
       expect(placeOf({ name: "Dal roti sabzi", meal: "dinner", words: "" }, {}, "dal roti sabzi")).toMatchObject({ kind: null, own: false });
+      // Two-word real dishes keep their own-kind placement (a kinds read that fails): only three or more kinds make a list.
+      for (const name of ["Curd rice", "Sabzi pulao"]) expect(placeOf({ name, meal: "dinner", words: "" }, {}, name.toLowerCase()), name).toMatchObject({ kind: name, own: true });
       // A name with a word outside the catalog stays their own dish.
       expect(placeOf({ name: "Boiled chicken", meal: "dinner", words: "" }, { own: true }, "boiled chicken")).toMatchObject({ own: true });
     });
