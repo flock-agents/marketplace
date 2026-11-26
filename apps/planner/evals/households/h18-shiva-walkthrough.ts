@@ -86,7 +86,7 @@ export const h18: Household = {
     away: [{ person: "Ankita", slots: ["Lunch"], days: SCHOOL }, { person: "Agastya", slots: ["Breakfast", "Lunch"], days: SCHOOL }],
     // Named dishes only: upma, poha, dry sabji, sambar, kadhi, dal, gravy, roti, rice and salad are their words for parts.
     library: [
-      ...dish("Idli", ["Breakfast"]), ...dish("Plain dosa", ["Breakfast"]), ...dish("Pancakes", ["Breakfast"], { alsoSlots: ["Agastya's breakfast box"] }),
+      ...dish("Idli", ["Breakfast"]), ...dish("Plain dosa", ["Breakfast"]), ...dish("Pancakes", ["Breakfast"], { alsoSlots: ["Agastya's breakfast box"], contains: ["egg"] }),
       ...dish("Bread omelette", ["Breakfast"], { days: ["Sun"] }),
       ...dish("Tomato rasam", ["Lunch"]), ...dish("Mixed vegetable kootu", ["Lunch"]),
       // The family's words: "4 eggs" (spec §5.1, lead's ruling F8).

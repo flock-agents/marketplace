@@ -929,3 +929,19 @@ function boxWeek4(): PlanOut {
   for (const day of ["Tue", "Thu"] as Weekday[]) sdOf(day, "Dinner").dishes.push({ name: "Plain paratha", for_people: ["Dadu Ram"] } as any);
   return p;
 }
+
+describe("h18 Pancakes: G6", () => {
+  // Pancakes is made with egg (lead ruling, 26 Nov), so a family Breakfast Pancakes kept from the no-egg father with Idli
+  // for him is a known break, not silent filler.
+  test("Pancakes (not for Gowri Shankar) with Idli at Breakfast passes no_silent_filler; Idli with no break for him still fails", async () => {
+    const h = (await import("../households")).ALL_HOUSEHOLDS.find((x) => x.id === "h18-shiva-walkthrough")!;
+    const p = baselineWeek(h, MON);
+    const tue = p.slotDays.find((x) => x.date === dateOf(MON, "Tue") && x.slot === "Breakfast")!;
+    tue.dishes = [{ name: "Pancakes", not_for: ["Gowri Shankar"] }, { name: "Idli", for_people: ["Gowri Shankar"] } as any];
+    const nsf = (q: PlanOut) => scorePlan(h, q, setupOfTruth(h), { failClosed: false }).notes.filter((n) => n.startsWith("no_silent_filler:"));
+    expect(nsf(p)).toEqual([]);
+    // Bad: the same Pancakes kept from him where nothing in it breaks (a dish with no egg) is silent.
+    tue.dishes = [{ name: "Plain dosa", not_for: ["Gowri Shankar"] }, { name: "Idli", for_people: ["Gowri Shankar"] } as any];
+    expect(nsf(p).length).toBeGreaterThan(0);
+  });
+});
