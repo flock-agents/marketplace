@@ -36,7 +36,7 @@ Returns `{chat, messages: [{from, time, text, mine, document?}]}`, oldest first.
 
 A document also has `document`:
 - A PDF: `{name, path, size}`. `path` is a file in your workspace's `downloads/` folder: read it to answer what the notice or circular says. Quote only what answers the ask.
-- Anything else: `{name, error}`, a short reason it was not downloaded. Only PDFs are downloaded, at most 5 a read (the newest first), none over 10 MB. "at most 5 a read" means another `read-chat` of the same chat gets the older ones (PDFs it has already downloaded come back without downloading again). Never download a document by hand in your browser.
+- Anything else: `{name, error}`, a short reason it was not downloaded. Only PDFs are downloaded, at most 5 a read (the newest first), none over 10 MB. "at most 5 a read" means another `read-chat` of the same chat gets the older ones (PDFs it has already downloaded come back without downloading again). Downloaded PDFs are deleted after 30 days: never rely on an old `path`; read the chat again for a fresh one. Never download a document by hand in your browser.
 
 ### search
 WhatsApp's own search. Params `{"query": "dinner on friday", "max": 10}`.

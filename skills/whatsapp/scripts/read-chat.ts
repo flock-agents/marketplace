@@ -7,11 +7,11 @@
  * first; a photo, voice message and the like is a short placeholder ("[photo]"). A document carries
  * `document`: a PDF as `{ name, path, size }`, a file the agent can read, downloaded in the same open
  * window (_documents.ts: PDFs only, at most 5 a read, at most 10 MB each); any other document, or a
- * PDF not downloaded, as `{ name, error }`.
+ * PDF not downloaded, as `{ name, error }`. Downloaded PDFs are deleted after 30 days.
  */
 import { PARAMS, main, openWhatsApp, openChat, fail, count, text, sameName, step, downloadStep, openTimeLeftMs, Fail } from "./_whatsapp";
 import { readChatScript, markDocumentScript, downloadActions, type ChatRead } from "./_page";
-import { DOC_LIMITS, StopDownloads, fetchDocuments, withDocuments } from "./_documents";
+import { DOC_LIMITS, StopDownloads, fetchDocuments, pruneDocuments, withDocuments } from "./_documents";
 
 const MAX_MESSAGES = 30;
 /** The run's own timeout (flock.skill.json functions.read-chat.timeoutMs) less a margin for closing. */
@@ -22,6 +22,8 @@ const want = count(PARAMS.count, 10, MAX_MESSAGES);
 
 await main(async () => {
   if (!chat) fail("MISSING_PARAM", "Give chat: the chat's exact name as the chat list shows it.");
+  // PDFs downloaded over 30 days ago go first: files only, no WhatsApp open needed.
+  pruneDocuments(process.env.SKILL_DATA_DIR || "");
   await openWhatsApp();
   const read = await openChat<ChatRead>(chat, readChatScript(want));
   if (!read || !sameName(read.chat, chat)) fail("CHAT_MISMATCH", `The chat that opened is "${read?.chat ?? "unreadable"}", not "${chat}": nothing was read.`);

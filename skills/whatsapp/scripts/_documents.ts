@@ -14,6 +14,10 @@
  * A PDF downloaded before (same message, file still there at the same size) is given again, not
  * fetched again: remembered in documents.json in the skill's data folder. Every other document, and
  * any PDF not downloaded, stays a placeholder with a short reason.
+ *
+ * Kept 30 days (owner 2026-11-26): each read-chat starts by deleting the PDFs it downloaded more than
+ * 30 days ago, file and entry (only files documents.json lists; nothing else in downloads/ is
+ * touched). A PDF read again after that is downloaded again, within the same per-read caps.
  */
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -23,6 +27,7 @@ export const DOC_LIMITS = {
   maxBytes: 10 * 1024 * 1024,
   perRead: 5,
   waitMs: 20_000,
+  keepMs: 30 * 24 * 60 * 60 * 1000,
 } as const;
 
 /** A document as read-chat answers it: the file to read, or why there is none. */
@@ -95,6 +100,24 @@ export function knownDocument(dir: string, id: string): DocResult | null {
   if (!k || typeof k.path !== "string" || !existsSync(k.path)) return null;
   try { if (statSync(k.path).size !== k.size) return null; } catch { return null; }
   return { name: k.name, path: k.path, size: k.size };
+}
+
+/** Deletes the PDFs downloaded more than 30 days before `now`, file and entry. Answers how many.
+ *  Never fails the read. */
+export function pruneDocuments(dir: string, now = Date.now()): number {
+  if (!dir || !existsSync(knownFile(dir))) return 0;
+  try {
+    const known = loadKnown(dir);
+    const expired = Object.keys(known).filter((id) => !(now - (known[id]?.at ?? 0) < DOC_LIMITS.keepMs));
+    if (!expired.length) return 0;
+    for (const id of expired) {
+      removeFile(typeof known[id]?.path === "string" ? known[id].path : undefined);
+      delete known[id];
+    }
+    writeFileSync(`${knownFile(dir)}.tmp`, JSON.stringify(known));
+    renameSync(`${knownFile(dir)}.tmp`, knownFile(dir));
+    return expired.length;
+  } catch { return 0; }
 }
 
 /** Remembers the PDFs this read downloaded, keeping the newest few hundred. Never fails the read. */

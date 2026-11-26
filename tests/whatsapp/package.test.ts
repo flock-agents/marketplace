@@ -26,7 +26,13 @@ describe("the manifest", () => {
     expect(manifest.slug).toBe("whatsapp");
     expect(manifest.tier).toBe("installable");
     expect(manifest.requires).toEqual([expect.objectContaining({ type: "browser_session", service: "whatsapp", loginUrl: "https://web.whatsapp.com/" })]);
-    expect(manifest.security.networkEndpoints.map((e: any) => e.hostname)).toEqual(["web.whatsapp.com"]);
+    // web.whatsapp.com first: Flock takes the first endpoint as the connector's site. Then WhatsApp's
+    // media servers, which WhatsApp Web itself fetches a chat's PDFs from (1.1.0), read only.
+    expect(manifest.security.networkEndpoints.map((e: any) => e.hostname)).toEqual(["web.whatsapp.com", "mmg.whatsapp.net", "*.cdn.whatsapp.net"]);
+    for (const e of manifest.security.networkEndpoints.slice(1)) {
+      expect(e.methods).toEqual(["GET"]);
+      expect(e.purpose).toContain("fetched by WhatsApp Web itself");
+    }
     expect(manifest.security.trustLevel).toBe("third-party");
   });
 

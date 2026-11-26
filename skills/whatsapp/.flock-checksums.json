@@ -4,17 +4,17 @@
   "sourceVersion": "1.1.0",
   "sourceTag": "whatsapp-v1.1.0",
   "files": {
-    "CHANGELOG.md": "4bb28d78e4952bb46e1911b5d438c27f22d33007e642802816a475668440d0db",
+    "CHANGELOG.md": "666bd64d305f5c72667be39d6edc5c8fe90b2e4df550b42ebd1edb96b587665a",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
     "scripts/list-chats.ts": "7c4de88c869b1f56a738b1f5b15ea37e69c882ca2e6ef222ecc6a3e0d43a83bf",
     "scripts/_limits.ts": "dea75c61d18528ac188d4a174007614fc5f76351c8dd832f00c2ee6abd9a3901",
     "scripts/search.ts": "8bdd14d937e82e87a9a49bfe50445b09b94e0dfabcc620dbfc932049f48533e8",
-    "scripts/read-chat.ts": "6a411e70b9f65c810b5005ffba4ac58edebe137f350d20110fae44f91899f8b5",
+    "scripts/read-chat.ts": "3166df819f03ac95a200349408696b660107a3d08af74800b92d997e0f3d7a62",
     "scripts/_page.ts": "7f44d94a7a0438f5791aeb70a2704d81259eed81a8e4deaf395912a42a267d6f",
     "scripts/send-message.ts": "6d2daaca10749f53796bf59249fb2c8858ff6bcc1b8631755f58cec60203a701",
     "scripts/_whatsapp.ts": "31617f9babe2c514aabbdac8eff25fa48629837d173faefded8f86c3e592f2b6",
-    "flock.skill.json": "ed8723d35bbc81e829abd8832f333b7a855d30f484983366344d0ab8a5234d6f",
-    "instructions.md": "a55f1883bac8084f3817e0c1a627c3becb1fea7eaa4d97140b396f3c0de3bfa8",
-    "scripts/_documents.ts": "8ad88fcc7fc222e64cffe973c93ebba7c4720769789cfe7a8668dc7be3bee252"
+    "flock.skill.json": "017e6115f219c9032f10f4a1bedac772b22520c61d21c037b534844f8def6e48",
+    "instructions.md": "ee93a8867e268ebd9314b62a6b0fab46c1a6a3ff247ceaccc1493625240fea9c",
+    "scripts/_documents.ts": "b6a906a0bda093b94db42fb093783dfcbac165f77ff7ddad2357ef09a284922a"
   }
 }

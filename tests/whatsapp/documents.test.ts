@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { DOC_LIMITS, StopDownloads, bytesOf, checkKept, fetchDocuments, sameFile, withDocuments, type DocumentIO, type Kept } from "../../skills/whatsapp/scripts/_documents";
+import { DOC_LIMITS, StopDownloads, bytesOf, checkKept, fetchDocuments, pruneDocuments, sameFile, withDocuments, type DocumentIO, type Kept } from "../../skills/whatsapp/scripts/_documents";
 import type { Message } from "../../skills/whatsapp/scripts/_page";
 
 let dir = "";
@@ -82,6 +82,47 @@ describe("which PDFs are downloaded", () => {
     const again = page(messages);
     await fetchDocuments(messages, again.io);
     expect(again.clicked).toEqual(["Fees.pdf"]);
+  });
+});
+
+describe("kept 30 days", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const known = () => JSON.parse(require("fs").readFileSync(join(dir, "whatsapp", "documents.json"), "utf8"));
+
+  it("deletes the PDFs downloaded over 30 days ago, file and entry, and keeps the rest", async () => {
+    const messages = [msg("old", "Old.pdf"), msg("new", "New.pdf")];
+    const out = await fetchDocuments(messages, page(messages).io);
+    const stray = join(downloadsDir, "Not-ours.pdf");
+    writeFileSync(stray, "%PDF-1.4");
+    const k = known();
+    k.old.at = Date.now() - 31 * DAY;
+    k.new.at = Date.now() - 29 * DAY;
+    writeFileSync(join(dir, "whatsapp", "documents.json"), JSON.stringify(k));
+    expect(pruneDocuments(dir)).toBe(1);
+    expect(existsSync((out.get("old") as any).path)).toBe(false);
+    expect(existsSync((out.get("new") as any).path)).toBe(true);
+    expect(existsSync(stray)).toBe(true);
+    expect(Object.keys(known())).toEqual(["new"]);
+    expect(pruneDocuments(dir)).toBe(0);
+    expect(DOC_LIMITS.keepMs).toBe(30 * DAY);
+  });
+
+  it("a PDF deleted that way is downloaded again when read again, within the caps", async () => {
+    const messages = [1, 2, 3, 4, 5, 6].map((n) => msg(`m${n}`, `C-${n}.pdf`));
+    await fetchDocuments(messages, page(messages).io);
+    const k = known();
+    for (const id of Object.keys(k)) k[id].at = Date.now() - 40 * DAY;
+    writeFileSync(join(dir, "whatsapp", "documents.json"), JSON.stringify(k));
+    expect(pruneDocuments(dir)).toBe(5);
+    const again = page(messages);
+    const out = await fetchDocuments(messages, again.io);
+    expect(again.clicked).toEqual(["C-6.pdf", "C-5.pdf", "C-4.pdf", "C-3.pdf", "C-2.pdf"]);
+    expect((out.get("m1") as any).error).toContain("at most 5 a read");
+  });
+
+  it("no data folder or no documents.json is nothing to do", () => {
+    expect(pruneDocuments("")).toBe(0);
+    expect(pruneDocuments(dir)).toBe(0);
   });
 });
 

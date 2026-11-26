@@ -66,6 +66,20 @@
           "GET",
           "POST"
         ]
+      },
+      {
+        "hostname": "mmg.whatsapp.net",
+        "purpose": "WhatsApp's media servers: PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "hostname": "*.cdn.whatsapp.net",
+        "purpose": "WhatsApp's media servers (media-<region>.cdn.whatsapp.net): PDFs posted in a chat (fetched by WhatsApp Web itself)",
+        "methods": [
+          "GET"
+        ]
       }
     ]
   }

@@ -113,6 +113,18 @@ describe.skipIf(!enabled)("the whatsapp functions on Flock's executor and browse
     const paths = again.out.messages.filter((m: any) => m.document?.path).map((m: any) => m.document.path);
     expect(paths.length).toBe(7);
     expect(paths).toContain(join(downloads, "Exam-Schedule.pdf"));
+
+    // 30 days on, the next read deletes Exam-Schedule.pdf first, then downloads it again.
+    const knownFile = join(flock.DATA_DIR, "skill-data", "whatsapp", "documents.json");
+    const known = JSON.parse(readFileSync(knownFile, "utf8"));
+    known["false_120364@g.us_S10"].at = Date.now() - 31 * 24 * 60 * MIN;
+    writeFileSync(knownFile, JSON.stringify(known));
+    const third = await run("read-chat", { chat: "School Notices", count: 30 });
+    expect(third.ok).toBe(true);
+    expect(dummy.docFetches.slice(7)).toEqual(["Exam-Schedule.pdf"]);
+    const exam = third.out.messages.find((m: any) => m.document?.name === "Exam-Schedule.pdf").document;
+    expect(exam).toEqual({ name: "Exam-Schedule.pdf", path: join(downloads, "Exam-Schedule.pdf"), size: expect.any(Number) });
+    expect(existsSync(exam.path)).toBe(true);
   });
 
   it("read-chat: a PDF whose download never starts, or far bigger than shown, stays a placeholder with why", async () => {
