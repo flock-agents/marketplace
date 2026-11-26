@@ -141,6 +141,7 @@ export function migrateMeaning(sqlite: Database, db: Db, now: Date = new Date(),
   const today = todayStr(now);
   const by = "app";
   let moved = oldKinds > 0;
+  // At boot no page is connected yet: nothing to tell, so the changes are not emitted.
   commit(db, () => {}, (tx, changes) => {
     const all = listSlots(tx, { all: true });
     const names = all.map((s) => s.name);
@@ -159,7 +160,9 @@ export function migrateMeaning(sqlite: Database, db: Db, now: Date = new Date(),
       log(`migrate: ${s.name}: templates read off its plates`);
     }
 
-    // 2. Category rows become their parts' words.
+    // 2. Category rows become their parts' words. A row held by a template leaves the library only once that meal's templates
+    //    are saved (below): a shape the store refuses keeps the row, so the family's word is never lost.
+    const heldRows: { row: LibraryDish; slot: string; word: string }[] = [];
     for (const r of library) {
       const slot = all.find((s) => same(s.name, r.slot));
       if (!isCategoryRow(r, slot, places)) continue;
@@ -175,7 +178,8 @@ export function migrateMeaning(sqlite: Database, db: Db, now: Date = new Date(),
         if (r.frequency && !t.share) t.share = r.frequency;
         if (r.said && !t.said) t.said = r.said;
       }
-      if (!held) log(`migrate: ${slot?.name ?? r.slot}: ${word} held by no template, dropped`);
+      if (held) { heldRows.push({ row: r, slot: slot!.name, word }); continue; }
+      log(`migrate: ${slot?.name ?? r.slot}: ${word} held by no template, dropped`);
       removeLibrary(tx, r.name, r.slot, by, changes);
       moved = true;
     }
@@ -188,12 +192,19 @@ export function migrateMeaning(sqlite: Database, db: Db, now: Date = new Date(),
     }
 
     // The templates saved: a meal's shape the store refuses is logged and left as it was.
+    const saved = new Set<string>();
     for (const s of all) {
       const ts = templates.get(s.name) ?? null;
-      if (JSON.stringify(ts) === JSON.stringify(s.templates)) continue;
+      if (JSON.stringify(ts) === JSON.stringify(s.templates)) { saved.add(s.name); continue; }
       const errs = checkMealShape(ts ?? [], { slot: s.name, slots: names });
       if (errs.length) { log(`migrate: ${s.name}: templates not saved: ${errs.join("; ")}`); continue; }
       upsertSlot(tx, { name: s.name, templates: ts }, by, changes);
+      saved.add(s.name);
+      moved = true;
+    }
+    for (const h of heldRows) {
+      if (!saved.has(h.slot)) { log(`migrate: ${h.slot}: ${h.word} kept in the library: its templates were not saved`); continue; }
+      removeLibrary(tx, h.row.name, h.row.slot, by, changes);
       moved = true;
     }
 

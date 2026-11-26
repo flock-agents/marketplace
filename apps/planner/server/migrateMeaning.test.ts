@@ -78,6 +78,19 @@ describe("migrateMeaning: library category rows become template words", () => {
     k.migrate();
     expect(k.slot("Lunch").templates![0].parts[1]).toEqual({ kind: "Dal", words: "dal or pappu" });
   });
+  it("a meal whose migrated templates the store refuses keeps its category row", async () => {
+    const k = await oldHouse({
+      slots: [{ name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { kind: "Sabzi" })] }],
+      library: [{ name: "Sabzi", slot: "Lunch", kind: "Sabzi" }],
+    });
+    // A shape saved before the store checked it: a link to a meal the house does not have.
+    const bad = [T({ kind: "Rice" }, { kind: "Sabzi" }, { from: "Brunch", kind: "Dal" })];
+    k.kit.sqlite.run(`UPDATE slots SET templates = ? WHERE name = 'Lunch'`, [JSON.stringify(bad)]);
+    k.migrate();
+    expect(k.slot("Lunch").templates).toEqual(bad);
+    expect(k.lib("Lunch")).toEqual(["Sabzi"]);
+    expect(k.lines).toContain("migrate: Lunch: sabzi kept in the library: its templates were not saved");
+  });
 });
 
 describe("migrateMeaning: rules get typed targets", () => {
