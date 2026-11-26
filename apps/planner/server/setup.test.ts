@@ -1875,9 +1875,17 @@ describe("setup checks what a read left out (H1-H3)", () => {
     const read = readOf(null, { rules: [] }, { library: [["Puri", "Lunch", "his box is usually puri rolled around the sabzi"]] });
     expect(uncited(read, sentences)).toEqual(["or sometimes with paneer or egg inside it"]);
     // A quote that holds the sentence cites it too; a sentence naming no food is never asked about.
-    const both = readOf(null, { rules: [] }, { library: [["Puri", "Lunch", "His box is usually puri rolled around the sabzi. Or sometimes with paneer or egg inside it"]] });
+    const both = readOf(null, { rules: [] }, { library: [["Paneer puri", "Lunch", "His box is usually puri rolled around the sabzi. Or sometimes with paneer or egg inside it"]] });
     expect(uncited(both, sentences)).toEqual([]);
     expect(uncited(read, [sentences[0], "we are four at home"])).toEqual([]);
+  });
+  it("uncited: a quote that runs across two sentences cites only the food it names (J6)", () => {
+    const sentences = ["his box is usually puri rolled around the sabzi", "or sometimes with paneer inside it"];
+    const read = readOf(null, { rules: [] }, { library: [["Puri roll", "Lunch", "His box is usually puri rolled around the sabzi. Or sometimes with paneer inside it"]] });
+    expect(uncited(read, sentences)).toEqual(["or sometimes with paneer inside it"]);
+    // A row named for the food in the second sentence writes it down, whichever sentence its quote starts in.
+    const named = readOf(null, { rules: [] }, { library: [["Puri roll", "Lunch", "His box is usually puri rolled around the sabzi"], ["Paneer puri", "Lunch", "Or sometimes with paneer inside it"]] });
+    expect(uncited(named, sentences)).toEqual([]);
   });
   it("uncited: a sentence with a box word and no food word is cited by a saved box slot's quote (fix round 1)", () => {
     const read = readOf({ slots: [...mains, lbox] }, { rules: [] }, { library: [["Puri", "Ira's lunch box", "puri rolled around the sabzi"]] });
@@ -1924,6 +1932,12 @@ describe("setup checks what a read left out (H1-H3)", () => {
     try { out = await run({ dishes: puriDishes(false), often: puriOften, kinds: ownKinds }, puriTranscript); } finally { console.log = was; }
     expect(out.f.of("dishes")).toHaveLength(2);
     expect(lines.some((l) => l.includes("still not written down") && l.includes(variant))).toBe(true);
+    expect(Object.keys(lib(out.k)).filter((x) => /paneer|egg/i.test(x))).toEqual([]);
+  });
+  it("applySetup asks for a sentence the re-read still leaves out (J6)", async () => {
+    const out = await run({ dishes: puriDishes(false), often: puriOften, kinds: ownKinds }, puriTranscript);
+    expect(out.f.of("dishes")).toHaveLength(2);
+    expect(out.r.asks).toContain(`You said '${variant}': which meal is that, and what's the dish?`);
     expect(Object.keys(lib(out.k)).filter((x) => /paneer|egg/i.test(x))).toEqual([]);
   });
   it("one dishes re-read only: an uncited sentence joins the re-read for a box the home re-read adds (fix 3)", async () => {

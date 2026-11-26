@@ -964,18 +964,33 @@ export function emptyBoxes(read: Pick<SetupRead, "slots" | "links" | "library" |
 /** Does a quote cite a sentence: one holds the other (both in plain words). */
 const cites = (quote: string, sentence: string): boolean => saidByFamily(quote, [sentence]) || saidByFamily(sentence, [plainWords(quote)]);
 /** The family's sentences that name food (a box word, or a word or two-word phrase the catalog places) and that no read library,
- *  seed, link or rule quote cites (H15): each one is re-read once from the dishes, by its words, then logged; never guessed. */
+ *  seed, link or rule row writes down (H15): each one is re-read once from the dishes, by its words, then asked (J6); never guessed.
+ *  A row writes a sentence down only when a quote of it cites the sentence and its name or kind covers one of the sentence's placed
+ *  food words (J6): a row's quote that runs across two sentences writes down only the food it names. */
 export function uncited(read: Pick<SetupRead, "library" | "seed" | "links" | "rules"> & Partial<Pick<SetupRead, "slots">>, sentences: string[]): string[] {
-  const quotes = [...read.library, ...read.seed, ...read.links, ...read.rules].map((x) => x.quote).filter(Boolean);
+  // Each row's quote with the words that name it: a dish's name, a seed's dishes, a link's words, a rule's items.
+  const rows: { quote: string; names: string[] }[] = [
+    ...read.library.map((x) => ({ quote: x.quote, names: [x.name] })), ...read.seed.map((x) => ({ quote: x.quote, names: x.dishes })),
+    ...read.links.map((x) => ({ quote: x.quote, names: [x.words, x.from] })), ...read.rules.map((x) => ({ quote: x.quote, names: x.items ?? [] })),
+  ].filter((x) => x.quote);
   // A sentence with a box word and no food word is about the box: a saved custom slot's quote cites it too.
   const boxQuotes = (read.slots ?? []).filter((x) => x.kind === "custom" && x.quote).map((x) => x.quote);
-  const food = (ws: string[]) => ws.some((w, i) => !!matchDish(w) || (i > 0 && !!matchDish(`${ws[i - 1]} ${w}`)));
+  // The placed food words of a sentence: a word, or a two-word phrase, the catalog places.
+  const foodOf = (ws: string[]) => ws.flatMap((w, i) => [...(matchDish(w) ? [w] : []), ...(i > 0 && matchDish(`${ws[i - 1]} ${w}`) ? [`${ws[i - 1]} ${w}`] : [])]);
+  const stem = (w: string) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+  const covers = (names: string[], food: string[]) => names.some((n) => {
+    const nw = plainWords(n).split(" ").map(stem), kind = matchDish(n)?.kind;
+    return food.some((f) => plainWords(f).split(" ").every((w) => nw.includes(stem(w))) || (!!kind && matchDish(f)?.kind === kind));
+  });
   return uniq(sentences.map(plainWords).filter((s) => {
-    const ws = s.split(" "), box = ws.some((w) => BOX_WORDS.includes(w)), dish = food(ws);
-    if (!s || !(box || dish) || quotes.some((q) => cites(q, s))) return false;
+    const ws = s.split(" "), box = ws.some((w) => BOX_WORDS.includes(w)), food = foodOf(ws), dish = food.length > 0;
+    if (!s || !(box || dish)) return false;
+    if (rows.some((x) => cites(x.quote, s) && (!dish || covers(x.names, food)))) return false;
     return dish || !boxQuotes.some((q) => cites(q, s));
   }));
 }
+/** The question for a meal sentence still not written down after the re-read (J6), in the family's own words. */
+export const unwrittenAsk = (sentence: string): string => `You said '${sentence}': which meal is that, and what's the dish?`;
 /** The re-read's rows that write down an uncited sentence (H15) or fill a box read empty (H3); mergeDishes lays them on the read. */
 function rowsFor(again: SetupRead, opts: { sentences: string[]; boxes: string[]; meals: string[] }): Pick<SetupRead, "library" | "seed" | "links"> {
   const wanted = (x: { slot: string; quote: string }) => opts.boxes.includes(resolveSlot(x.slot, opts.meals) ?? "") || opts.sentences.some((s) => cites(x.quote, s));
@@ -2423,7 +2438,15 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
-  for (const s of uncited(checked.read, replySentences)) log(`dishes${uncitedAsked ? " re-read" : ""}: still not written down, nothing guessed: "${s}"`);
+  // J6: what the re-read still leaves out is a read-back question in the family's words, never a guessed row.
+  // On a correction only a sentence of its new replies is asked: the family has already answered for the earlier ones.
+  const before0 = new Set(savedOf(deps.db).state?.replies ?? []);
+  const newSentences = new Set(repliesOf(deps.transcript).filter((l) => !before0.has(plainWords(l))).flatMap((l) => l.split(/[.!?;]+/)).map(plainWords).filter(Boolean));
+  for (const s of uncited(checked.read, replySentences)) {
+    log(`dishes${uncitedAsked ? " re-read" : ""}: still not written down, nothing guessed: "${s}"`);
+    const ask = unwrittenAsk(s);
+    if (newSentences.has(s) && !checked.asks.includes(ask)) checked.asks.push(ask);
+  }
   // H6: a rule kept as a note for a field it lacks is re-read once from the rules part, naming what is missing; the re-read's
   // complete rules said in the same words stand in for it. Still incomplete: kept as a note, and logged.
   if (checked.incomplete.length) {
