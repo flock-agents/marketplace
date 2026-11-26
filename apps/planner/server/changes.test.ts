@@ -191,6 +191,17 @@ describe("set_rule", () => {
     expect(changed(before, k.snapshot())).toEqual(days.map((d) => `${d}|Dinner`).sort());
   });
 
+  it("set_rule saves typed targets from the agent's items and to", async () => {
+    const k = await planned();
+    await k.op("set_person", { name: "Agastya", group: "child" });
+    const r = await k.op("set_rule", { hard: true, what: "swap", who: "Agastya", items: ["upma"], to: "pancakes", quote: "pancakes when it's upma" });
+    expect(r.rule.targets).toEqual([{ type: "kind", kind: "Upma" }]);
+    expect(r.rule.gives).toEqual({ type: "item", item: "Pancakes", kind: null });
+    const soft = await k.op("set_rule", { hard: false, what: "swap", items: ["ragi"], to: "millets", frequency: "sometimes", quote: "millets sometimes" });
+    expect(soft.rule.to).toBe("millets");
+    expect(soft.rule.gives).toBeNull();
+  });
+
   it("a soft rule changes nothing that holds; a removed rule re-plans nothing; a change keeps the rule's id", async () => {
     const k = await planned();
     const before = k.snapshot();

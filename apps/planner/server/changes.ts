@@ -22,6 +22,7 @@ import { isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, t
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
+import { resolveGives, resolveTarget } from "./targets";
 import { canonTag, checkSlot, forbidden, notFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
@@ -313,9 +314,19 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.who !== undefined) input.who = b.who === null ? null : personNames(db, [b.who], "who")[0];
     if (b.slots !== undefined) input.slots = b.slots === null ? null : names(b.slots, "slots").map((s) => slotNamed(db, s, "slots").name);
     if (b.days !== undefined) input.days = b.days === null ? null : weekdays(b.days, "days");
-    if (b.items !== undefined) input.items = b.items === null ? null : names(b.items, "items").map(canonTag);
+    if (b.items !== undefined) {
+      const said = b.items === null ? null : names(b.items, "items");
+      input.items = said && said.map(canonTag);
+      // Resolved once, here: what the rule is about is typed from now on (targets.ts).
+      input.targets = said && said.map(resolveTarget);
+    }
     if (b.to !== undefined) input.to = words(b.to, "to");
     if (b.frequency !== undefined) input.frequency = b.frequency === null ? null : frequencyOf(b.frequency) ?? refuse('frequency must be usually, sometimes, rarely or "<n>/week"');
+    // A swap's item: a soft swap with a frequency ("millets sometimes") stays its own kind, so it gives nothing typed.
+    if (b.to !== undefined || b.frequency !== undefined) {
+      const to = input.to ?? before?.to ?? null, freq = input.frequency !== undefined ? input.frequency : before?.frequency ?? null;
+      input.gives = to && !freq ? resolveGives(to) : null;
+    }
     if (b.per_meal !== undefined) input.per_meal = b.per_meal === null ? null : typeof b.per_meal === "number" && Number.isInteger(b.per_meal) && b.per_meal > 0 ? b.per_meal : refuse("per_meal must be a whole number above 0");
     if (b.fasting_food !== undefined) input.fasting_food = b.fasting_food === null ? null : names(b.fasting_food, "fasting_food");
     if (b.quote !== undefined) input.quote = name(b.quote, "quote");
