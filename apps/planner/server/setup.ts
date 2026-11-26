@@ -58,6 +58,35 @@ Q: And breakfast? A8: usually idli or dosa, upma once, bread toast on busy days.
 Q: Which grocery app? A9: Blinkit. Milk comes from Country Delight every morning`;
 const NOT_THE_EXAMPLE = "That family is only an example: write what THIS family said, nothing from the example.";
 
+/** The words that join dishes on a plate and are no part of any dish's name (J11). */
+const PLATE_CONNECTORS = ["and", "a", "with", "aur"];
+/** The dishes (two or more, from `among`) whose names, in order, are all the words of `name` once connectors are dropped: the
+ *  name is a plate said as one dish (J11). Null when any word is left over or fewer than two dishes make it. */
+export function platesOf(name: string, among: string[]): string[] | null {
+  const words = plainWords(name).split(" ").filter((w) => w && !PLATE_CONNECTORS.includes(w));
+  const cands = among.map((n) => ({ n, w: plainWords(n).split(" ").filter((w) => w && !PLATE_CONNECTORS.includes(w)) })).filter((c) => c.w.length);
+  const cover = (i: number): string[] | null => {
+    if (i === words.length) return [];
+    for (const c of cands) if (c.w.every((w, j) => words[i + j] === w)) { const rest = cover(i + c.w.length); if (rest) return [c.n, ...rest]; }
+    return null;
+  };
+  const parts = words.length >= 2 ? cover(0) : null;
+  return parts && uniq(parts.map(dishKey)).length >= 2 ? parts : null;
+}
+/** Whether a name is only a list of catalog kind names ("Dal roti sabzi"): never an own kind (J11). */
+export const isKindList = (name: string): boolean => {
+  if (matchDish(name)) return false;
+  const kinds = CATALOG.kinds.map((k) => plainWords(k.name).split(" ").filter(Boolean)).sort((a, b) => b.length - a.length);
+  const words = plainWords(name).split(" ").filter((w) => w && !PLATE_CONNECTORS.includes(w));
+  let n = 0;
+  for (let i = 0; i < words.length;) {
+    const k = kinds.find((w) => w.every((x, j) => words[i + j] === x));
+    if (!k) return false;
+    i += k.length; n++;
+  }
+  return n >= 2;
+};
+
 /** What a meal eaten in place of a main meal has of that meal (H3): all of it as made, one part of it, or nothing. */
 const HOME_MEALS = ["as_made", "a_part", "none"] as const;
 const HOME_SCHEMA = {
@@ -799,6 +828,22 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
     seed.push({ ...s, slot, dishes: s.dishes.filter((d, i) => s.dishes.findIndex((x) => dishKey(x) === dishKey(d)) === i) });
     for (const name of s.dishes) if (!library.some((x) => dishKey(x.name) === dishKey(name) && x.slot === slot))
       library.push({ name, slot, frequency: null, days: null, quote: s.quote, often: "" });
+  }
+
+  // J11: a name that is only the plate of two or more other dishes of the same meal ("Curry bread salad" beside Bread, Curry and
+  // Salad) is a plate said as one dish: it leaves the library, and each seed row holding it takes those dishes instead. Only the
+  // names are read (never a dish's meaning).
+  for (const d of [...library]) {
+    const others = uniq([...library.filter((x) => x !== d && x.slot === d.slot).map((x) => x.name), ...seed.filter((x) => x.slot === d.slot).flatMap((x) => x.dishes)])
+      .filter((n) => dishKey(n) !== dishKey(d.name));
+    const parts = platesOf(d.name, others);
+    if (!parts) continue;
+    library.splice(library.indexOf(d), 1);
+    for (const x of seed) if (x.slot === d.slot && x.dishes.some((n) => dishKey(n) === dishKey(d.name))) {
+      const dishes = x.dishes.flatMap((n) => (dishKey(n) === dishKey(d.name) ? parts : [n]));
+      x.dishes = dishes.filter((n, i) => dishes.findIndex((y) => dishKey(y) === dishKey(n)) === i);
+    }
+    dropped.push(`${d.name} at ${d.slot}: only the plate of ${parts.join(", ")}, not a dish`);
   }
 
   // Class 6: a person with their own meal in place of a main meal eats nothing of the family's there. A dish or plate of that
@@ -1665,6 +1710,8 @@ export function placeOf(ask: KindsAsk, x: Record<string, unknown>, word: string)
   const k = x.own === true ? null : catalogKind(str(x.kind));
   if (!k) {
     const same = catalogKind(ask.name);
+    // A name that is only a list of catalog kinds ("Dal roti sabzi") is no own kind: unplaced, so it is asked (J11).
+    if (!same && isKindList(ask.name)) return { kind: null, sub: null, item: null, own: false, named: "dish", word };
     return same ? { kind: same.name, sub: soleSub(same), item: null, own: false, named, word } : { kind: ask.name.trim(), sub: null, item: null, own: true, named: "dish", word };
   }
   const sub = catalogSub(k.name, str(x.sub)) ?? soleSub(k);

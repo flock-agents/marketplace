@@ -1857,6 +1857,41 @@ describe("setup checks what a read left out (H1-H3)", () => {
       expect(r.said).not.toContain("Does Tara also eat the family's breakfast");
     });
   });
+  // J11 (task 15 round 5, L2): a name that is only the plate of the meal's other dishes is no dish; an own kind is never a list of
+  // catalog kinds. A made-up family: Dinner is bread, curry and a salad.
+  describe("a plate worded as one dish (J11)", () => {
+    const pq = "Dinner is bread, curry and a salad";
+    const said = [plainWords(pq), "egg bhurji on sundays", "dal makhani", "sabzi pulao", "curry bread"];
+    const lib = (...rows: string[][]) => rows.map(([n, slot = "Dinner", q = pq]) => [n, slot, q]);
+    const checkedDishes = (library: string[][], seed: string[][]) =>
+      checkRead(readOf({ slots: mains }, { rules: [] }, { library, seed }), { household: householdOf(I_HOUSEHOLD), said, sentences: said });
+    it("checkRead: a plate worded as one dish is split", () => {
+      const c = checkedDishes(lib(["Bread"], ["Curry"], ["Salad"], ["Curry bread salad"], ["Egg bhurji", "Dinner", "egg bhurji on sundays"]),
+        [["Dinner", "Curry bread salad, Egg bhurji", pq]]);
+      expect(c.read.library.map((d) => d.name)).toEqual(["Bread", "Curry", "Salad", "Egg bhurji"]);
+      expect(c.read.seed.map((x) => x.dishes)).toEqual([["Curry", "Bread", "Salad", "Egg bhurji"]]);
+      expect(c.dropped.some((d) => d.includes("Curry bread salad"))).toBe(true);
+    });
+    it("checkRead guards: a dish whose name holds kind words stays; one other dish named is not a plate", () => {
+      const keep = checkedDishes(lib(["Dal"], ["Roti"], ["Dal makhani", "Dinner", "dal makhani"], ["Sabzi"], ["Sabzi pulao", "Dinner", "sabzi pulao"]), []);
+      for (const n of ["Dal makhani", "Sabzi pulao"]) expect(keep.read.library.some((d) => d.name === n && d.slot === "Dinner"), n).toBe(true);
+      const one = checkedDishes(lib(["Curry"], ["Curry bread"]), []);
+      expect(one.read.library.map((d) => d.name)).toEqual(["Curry", "Curry bread"]);
+    });
+    it("placeOf: a kind-list name is not an own kind", () => {
+      expect(placeOf({ name: "Dal roti sabzi", meal: "dinner", words: "" }, {}, "dal roti sabzi")).toMatchObject({ kind: null, own: false });
+      // A name with a word outside the catalog stays their own dish.
+      expect(placeOf({ name: "Boiled chicken", meal: "dinner", words: "" }, { own: true }, "boiled chicken")).toMatchObject({ own: true });
+    });
+    it("applySetup: the dishes read gives the plate as a dish: no dish and no kind of that name is saved", async () => {
+      const transcript = [...I_TRANSCRIPT.slice(0, 8), "Q: And dinner?", `A: ${pq}. Egg bhurji on Sundays.`, ...I_TRANSCRIPT.slice(10)];
+      const { fam, k } = await run({ home: noBoxes, dishes: { library: [...I_DISHES.library.filter((d) => d[1] !== "Dinner"),
+        ...lib(["Bread"], ["Curry"], ["Salad"], ["Curry bread salad"], ["Egg bhurji", "Dinner", "egg bhurji on sundays"])],
+      seed: [["Dinner", "Curry bread salad, Egg bhurji", pq]], links: [] }, kinds: ownKinds }, transcript);
+      expect(k.rows("library").some((d) => /curry bread salad/i.test(d.name))).toBe(false);
+      expect(JSON.stringify(fam.slots.find((s: any) => s.name === "Dinner").templates)).not.toMatch(/curry bread salad/i);
+    });
+  });
   it("the home re-read is taken when it clears a box, though it leaves home_meal out", async () => {
     const { f, slot } = await run({ home: (_req: ModelRequest, n: number) => (n === 1 ? noBoxes : { ...withBoxes, slots: [...mains, sprouts, { ...bbox, home_meal: undefined }, lbox] }) });
     expect(f.of("home")).toHaveLength(2);
