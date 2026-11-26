@@ -13,7 +13,7 @@
 import type { Database } from "bun:sqlite";
 import { eq } from "drizzle-orm";
 import { house, slots as slotsTable } from "./db/schema";
-import { INSTEAD_STEP } from "./db/constants";
+import { INSTEAD_STEP, SLOT_ORDER } from "./db/constants";
 import { todayStr, type Weekday } from "./dates";
 import { dishKey } from "./dishText";
 import { getHouse, type Db } from "./family";
@@ -215,6 +215,18 @@ export function migrateMeaning(sqlite: Database, db: Db, now: Date = new Date(),
       if (r.what === "swap" && r.hard && r.to && !r.gives) set.gives = resolveGives(r.to);
       if (!Object.keys(set).length) continue;
       updateRule(tx, r.id, set, by, changes);
+      moved = true;
+    }
+
+    // 4b. A person's own custom slot sits one step after the meal it replaces (§5.4): the old rule took such a person off Lunch,
+    //     so one not already there goes after Lunch (after Breakfast when its name says breakfast).
+    const mainOrders = new Set<number>([SLOT_ORDER.Breakfast, SLOT_ORDER.Lunch, SLOT_ORDER.Dinner, ...all.filter((s) => s.kind === "main").map((s) => s.order)]);
+    for (const s of all) {
+      if (s.kind !== "custom" || !s.usual_people.length || [...mainOrders].some((o) => o + INSTEAD_STEP === s.order)) continue;
+      const meal = /breakfast/i.test(s.name) ? "Breakfast" : "Lunch";
+      const order = SLOT_ORDER[meal] + INSTEAD_STEP;
+      upsertSlot(tx, { name: s.name, order }, by, changes);
+      log(`migrate: ${s.name}: order ${s.order} → ${order} (replaces ${meal})`);
       moved = true;
     }
 

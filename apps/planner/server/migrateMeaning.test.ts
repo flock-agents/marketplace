@@ -129,6 +129,21 @@ describe("migrateMeaning: slots", () => {
     expect(k.slot("Evening snack").templates).toBeNull();
   });
 
+  it("a person's own custom slot moves to one step after the meal it replaces", async () => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
+    const k = await oldHouse({ slots: [{ name: "Breakfast", kind: "main", order: 10, templates: [] }, { name: "Lunch", kind: "main", order: 30, templates: [] },
+      { name: "Agastya's tiffin", kind: "custom", order: 20, usual_people: ["Agastya"], days: [...days], templates: [] },
+      { name: "Agastya's breakfast box", kind: "custom", order: 12, usual_people: ["Agastya"], days: [...days], templates: [] },
+      { name: "Ravi's lunch box", kind: "custom", order: 35, usual_people: ["Ravi"], days: [...days], templates: [] },
+      { name: "Ravi's extras", kind: "addon", addon_of: "Lunch", order: 60, usual_people: ["Ravi"], templates: [] }] });
+    expect(k.migrate()).toBe("migrated");
+    expect(k.slot("Agastya's tiffin").order).toBe(35);
+    expect(k.slot("Agastya's breakfast box").order).toBe(15);
+    expect(k.slot("Ravi's lunch box").order).toBe(35);
+    expect(k.slot("Ravi's extras").order).toBe(60);
+    expect(k.lines).toContain("migrate: Agastya's tiffin: order 20 → 35 (replaces Lunch)");
+  });
+
   it("runs once: a second boot changes nothing", async () => {
     const k = await oldHouse({
       slots: [{ name: "Lunch", kind: "main", order: 30, templates: [T({ kind: "Rice" }, { kind: "Sabzi" })] }, { name: "Dinner", kind: "main", order: 50, templates: null }],
