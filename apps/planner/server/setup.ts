@@ -588,12 +588,14 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
   // the lunch its people carry: on their carrying days, never every day. A person's weekday lunch: the replies' word, else
   // household.weekly's; their days: their weekly entries', else Mon–Fri (as the plan reads a lunch said with no weekly entry:
   // planDays withLunchSaid). Left as read when anyone of its people does not carry lunch.
-  const weeklyOf = (p: string) => (ctx.household.weekly ?? []).filter((w) => w.person === p && w.weekdays.length);
+  // Days at home are no carrying days (as planDays and lunchLine read household.weekly); each entry's own lunch counts, the
+  // replies' word winning over every entry of that person (withLunchSaid).
+  const weeklyOf = (p: string) => (ctx.household.weekly ?? []).filter((w) => w.person === p && w.where !== "home" && w.weekdays.length);
   const carryDays = (p: string): Weekday[] | null => {
-    const lunch = weekday_lunch.find((w) => w.person === p)?.lunch ?? weeklyOf(p).find((w) => w.lunch)?.lunch ?? null;
-    if (lunch !== "carries") return null;
-    const ws = weeklyOf(p);
-    return ws.length ? uniq(ws.flatMap((w) => w.weekdays)) : ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    const said = weekday_lunch.find((w) => w.person === p)?.lunch ?? null, ws = weeklyOf(p);
+    if (!ws.length) return said === "carries" ? ["Mon", "Tue", "Wed", "Thu", "Fri"] : null;
+    const days = uniq(ws.filter((w) => (said ?? w.lunch) === "carries").flatMap((w) => w.weekdays));
+    return days.length ? days : null;
   };
   for (const s of slots) if (s.kind === "addon" && s.extras && s.addon_of === "Lunch" && !s.days.length && s.usual_people.length) {
     const each = s.usual_people.map(carryDays);
@@ -958,7 +960,9 @@ export function diffSetup(saved: Saved, next: SetupRead, fresh: string[], all: b
   for (const s of next.seed) if (inNew(s.quote) && !saved.seed.some((x) => seedKey(x) === seedKey(s))) ops.seed.push(s);
 
   if (!cookSame(saved.cook, next.cook)) {
-    const cookSaid = next.cook ? inNew(next.cook.quote) || (!!next.cook.name && named(next.cook.name)) : !!saved.cook?.name && named(saved.cook.name);
+    // A cook the family never named is named by the word "cook" in a new reply ("we don't have a cook any more").
+    const cookSaid = next.cook ? inNew(next.cook.quote) || (!!next.cook.name && named(next.cook.name))
+      : !!saved.cook && named(saved.cook.name ?? "cook");
     if (cookSaid || all) { ops.cook = next.cook; if (!all) ops.changed.push(next.cook ? `${cookLine(next.cook)}` : `No cook.`); }
     else ops.discarded.push("cook");
   }
@@ -1398,7 +1402,7 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
   // Its own deadline, inside the setup's: never what pushes the setup past its budget (eval h4 ran 150.09 s); on a timeout what
   // it would place stays the family's fixed dish.
   const by = Math.min(until - KINDS_MARGIN_MS, Date.now() + KINDS_MS);
-  const ask = async (these: KindsAsk[]): Promise<KindsAsk[] | null> => {
+  const ask = async (these: KindsAsk[], first: boolean): Promise<KindsAsk[] | null> => {
     const regional = regionalLines(these.map((a) => a.name));
     const user = JSON.stringify({ catalog: catalogLines(), dishes: these.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
       ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
@@ -1412,15 +1416,19 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
       if (x) out.set(`${a.meal}|${dishKey(a.name)}`, placeOf(a, x, wordOf(a.name, a.words)));
       else left.push(a);
     }
+    // A first answer that places none of the dishes asked (`dishes: []`) is no answer either: never every dish left out.
+    if (first && left.length === these.length) { log("kinds: the answer placed none of the dishes asked"); return null; }
     return left;
   };
-  const left = await ask(asks);
+  const left = await ask(asks, true);
   if (!left?.length) return { placed: out, left: [] };
   // An answer that left dishes out (eval h18 rep 3: "Dry sabji" read as nothing, saved as a dish on the plate): asked again,
-  // once, for only those.
+  // once, for only those, while a second try's time is left. Left out only when both real answers leave a dish out: no
+  // time, or a failed second call, keeps them as code found them.
+  if (by - Date.now() < RETRY_FLOOR_MS) { log(`kinds: the answer left out ${left.length} dishes; no time to ask again`); return { placed: out, left: [] }; }
   log(`kinds: the answer left out ${left.map((a) => `${a.name} (${a.meal})`).join(", ")}; asking once more for them`);
-  const again = await ask(left);
-  return { placed: out, left: again ?? left };
+  const again = await ask(left, false);
+  return { placed: out, left: again ?? [] };
 }
 
 /** One of the family's dishes at a meal, with its place and how often they said they have it. */

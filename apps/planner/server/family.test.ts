@@ -3,6 +3,7 @@
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
 import { commit, upsertSlot } from "./slotStore";
+import { house } from "./db/schema";
 
 describe("set_person", () => {
   it("set_person upserts by name and keeps the family's words", async () => {
@@ -93,7 +94,7 @@ describe("the house", () => {
     // One visit without meals is kept as the plain time, the shape every earlier row has.
     expect((await op("set_cook", { name: "Lakshmi", arrival: ["07:30"] })).house).toMatchObject({ cook_arrival: "07:30", cook_visits: [{ at: "07:30" }] });
     expect(rows("house")[0].cook_arrival).toBe("07:30");
-    for (const arrival of [[], ["6:00", "16:30"], "06:00 and 16:30", ["06:00", "06:00"], [{ at: "06:00", meals: ["Brunch"] }], [{ at: "06:00", meals: "Breakfast" }], [{ meals: ["Dinner"] }]])
+    for (const arrival of [["6:00", "16:30"], "06:00 and 16:30", ["06:00", "06:00"], [{ at: "06:00", meals: ["Brunch"] }], [{ at: "06:00", meals: "Breakfast" }], [{ meals: ["Dinner"] }]])
       expect((await op("set_cook", { name: "Lakshmi", arrival })).code, JSON.stringify(arrival)).toBe("APP_REFUSED");
     expect((await op("set_cook", { name: "Lakshmi", arrival: "6:00 and 16:30" })).error).toContain('[{ at: "06:00", meals: ["Breakfast", "Lunch"] }');
     expect(rows("house")[0].cook_arrival).toBe("07:30");
@@ -107,6 +108,24 @@ describe("the house", () => {
     expect((await op("set_cook", { name: "Lakshmi", days: "Mon", arrival: "07:30" })).code).toBe("APP_REFUSED");
     const { house } = await op("set_cook", { name: "Lakshmi", days: ["monday", "TUES", "Wednesday"], arrival: "07:30", note: "off on festival days" });
     expect(house).toMatchObject({ cook_name: "Lakshmi", cook_days: ["Mon", "Tue", "Wed"], cook_note: "off on festival days" });
+  });
+
+  it("a cook setup saved without a name or times is shown and edited as she is: nameless, her untimed visits kept (F5 follow-on)", async () => {
+    const { op, owner, rows, kit } = await boot();
+    await op("set_cook", { name: "Lakshmi", days: ["Mon"], arrival: "07:30" });
+    // As apply_setup saves a cook the family never named, whose visits were said by their meals.
+    kit.db.update(house).set({ cook_name: null, cook_days: JSON.stringify(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]),
+      cook_arrival: JSON.stringify([{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }]) }).run();
+    // The Family page's cook form, as it sends a blank name and a blank arrival.
+    const cook = async (body: object) => { const r = await owner("POST", "/api/family/cook", body); expect(r.status).toBe(200); return r.body.house; };
+    expect(await cook({ name: "", days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], arrival: "", note: "off on festival days" }))
+      .toMatchObject({ cook_name: null, cook_visits: [], cook_meal_visits: [["Breakfast", "Lunch"], ["Dinner"]], cook_note: "off on festival days" });
+    // No name sent leaves her nameless; times typed replace the visits; an empty arrival clears the times.
+    expect(await cook({ arrival: ["07:00", "18:00"] })).toMatchObject({ cook_name: null, cook_visits: [{ at: "07:00" }, { at: "18:00" }], cook_meal_visits: [] });
+    expect(await cook({ arrival: [] })).toMatchObject({ cook_name: null, cook_arrival: null, cook_visits: [] });
+    expect(rows("house")[0].cook_days).toBe(JSON.stringify(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]));
+    // Named later: her name. A new cook still needs one (the test above).
+    expect((await cook({ name: "Lakshmi" })).cook_name).toBe("Lakshmi");
   });
 
   // The interview runner (3.4.0): each setup answer saves only the rules it said, and the rules are read back from `said`.

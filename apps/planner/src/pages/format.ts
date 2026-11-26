@@ -283,10 +283,13 @@ export function ruleChip(r: Omit<Rule, "days" | "note"> & { days: readonly strin
 }
 
 /** When the cook comes, as the Family page says it: "comes at 7:30 am", or for a cook who comes twice "comes at 6 am
- *  (Breakfast, Lunch) and 4:30 pm (Dinner)"; null when no time was said. */
-export function cookVisitsText(visits: readonly { at: string; meals?: string[] }[]): string | null {
-  if (!visits.length) return null;
-  return `comes at ${visits.map((v) => `${clockText(v.at)}${v.meals?.length ? ` (${v.meals.join(", ")})` : ""}`).join(" and ")}`;
+ *  (Breakfast, Lunch) and 4:30 pm (Dinner)"; a visit said by its meals alone, with no clock: "comes for Breakfast, Lunch and
+ *  for Dinner". Null when nothing was said. */
+export function cookVisitsText(visits: readonly { at: string; meals?: string[] }[], untimed: readonly (readonly string[])[] = []): string | null {
+  const meals = untimed.filter((m) => m.length).map((m) => `for ${m.join(", ")}`);
+  if (!visits.length && !meals.length) return null;
+  const timed = visits.length ? `comes at ${visits.map((v) => `${clockText(v.at)}${v.meals?.length ? ` (${v.meals.join(", ")})` : ""}`).join(" and ")}` : "";
+  return meals.length ? `${timed ? `${timed} and` : "comes"} ${meals.join(" and ")}` : timed;
 }
 
 /** What the Family page says about the cook beyond who and when: what they make well and will not make, their time, and

@@ -24,7 +24,9 @@ export type SavedVisit = { at?: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's
  *  skip_days (slotStore.ts). */
 export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced" | "cuisines"> &
-  { cook_days: Weekday[]; cook_visits: CookVisit[]; connected_apps: GroceryApp[]; history_synced: HistorySynced;
+  { cook_days: Weekday[]; cook_visits: CookVisit[];
+    /** The meals of each visit said with no time (setup: "she comes in the morning for breakfast and lunch"), in order. */
+    cook_meal_visits: string[][]; connected_apps: GroceryApp[]; history_synced: HistorySynced;
     /** The family's cuisine profile (kinds.json cuisines); null = not read yet. */
     cuisines: string[] | null };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
@@ -72,9 +74,11 @@ export function cookVisits(arrival: string | null): SavedVisit[] {
 
 export function houseView(row: HouseRow): HouseView {
   // The page's visits are the timed ones (a visit with no time is setup's and the plan's: savedOf, houseCook).
-  const visits = cookVisits(row.cook_arrival).filter((v): v is CookVisit => !!v.at);
-  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every timed visit.
-  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_days: list(row.cook_days),
+  const all = cookVisits(row.cook_arrival), visits = all.filter((v): v is CookVisit => !!v.at);
+  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every timed visit, and
+  // cook_meal_visits the meals of each visit with no time.
+  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_meal_visits: all.filter((v) => !v.at).map((v) => v.meals ?? []),
+    cook_days: list(row.cook_days),
     connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced),
     cuisines: row.cuisines == null ? null : list<string>(row.cuisines) };
 }
@@ -257,9 +261,19 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     // every 7:30 correction was sent as visits and lost).
     if (b.arrival === undefined && b.visits !== undefined) b = { ...b, arrival: b.visits };
     const had = getHouse(db);
-    const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
+    // A cook saved without a name (setup: the family never named her, D10) is edited as she is: a blank or null name keeps her
+    // nameless, no name leaves the name as it was. A new cook still needs a name.
+    const hadCook = !!(had.cook_name || had.cook_days);
+    const set: Partial<typeof house.$inferInsert> = {};
+    if (!hadCook || (typeof b.name === "string" && b.name.trim())) set.cook_name = name(b.name, "the cook's name");
+    else if (b.name !== undefined) set.cook_name = b.name === null || typeof b.name === "string" ? null : name(b.name, "the cook's name");
     if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));
-    if (b.arrival !== undefined || !had.cook_arrival)
+    // An empty arrival for a saved cook clears her times; the visits said by their meals alone (setup's) stay.
+    const empty = b.arrival === null || b.arrival === "" || (Array.isArray(b.arrival) && !b.arrival.length);
+    if (hadCook && empty) {
+      const untimed = cookVisits(had.cook_arrival).filter((v) => !v.at);
+      set.cook_arrival = untimed.length ? JSON.stringify(untimed) : null;
+    } else if (b.arrival !== undefined || (!had.cook_arrival && !hadCook))
       set.cook_arrival = arrival(b.arrival, slotNames(db));
     for (const [field, column] of [["makes_well", "cook_makes_well"], ["wont_make", "cook_wont_make"], ["time_limit", "cook_time_limit"], ["note", "cook_note"]] as const)
       if (b[field] !== undefined) set[column] = words(b[field], field);

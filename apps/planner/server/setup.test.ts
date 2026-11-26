@@ -421,8 +421,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
       const all = containsOf()(req) as Record<string, unknown>;
       delete all["Dish 45"];
       return all;
-    // The kinds read places every dish as the family's own (one it left out would be asked, not saved: F4).
-    }, kinds: (req: ModelRequest) => ({ dishes: JSON.parse(req.user).dishes.map((d: any) => ({ name: d.name, meal: d.meal, own: true, named: "dish" })) }) });
+    } });
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
     expect(f.of("contains").map((c) => JSON.parse(c.user).dishes.length).sort((a, b) => b - a)).toEqual([CONTAINS_BATCH, 5]);
@@ -1231,6 +1230,22 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     expect(slot("Lunch").templates[0].parts).toEqual([{ kind: "Rice", words: "rice" }, { kind: "Rice curry", sub: "Sambar", words: "sambar" }]);
   });
 
+  it("a kinds answer that places none of the dishes asked is no answer: nothing asked, nothing removed (F4 review)", async () => {
+    const base = await walk({ kinds: { ok: false, code: "unavailable", message: "down" } });
+    const { f, k, r, slot } = await walk({ kinds: { dishes: [] } });
+    expect(f.of("kinds")).toHaveLength(1);
+    expect(k.rows("library").map((d) => `${d.name}@${d.slot}`).sort()).toEqual(base.k.rows("library").map((d) => `${d.name}@${d.slot}`).sort());
+    expect(r.asks).toEqual(base.r.asks);
+    expect(r.asks.join("\n")).not.toContain("What do you mean by");
+    expect(itemsOf(slot("Lunch"))).toContain("Dry sabji");   // as a failed read leaves it: the family's fixed dish
+  });
+  it("a second kinds call that fails keeps the dishes the first left out as code found them (F4 review)", async () => {
+    const { f, r, slot } = await walk({ kinds: (_req: ModelRequest, n: number) => (n === 1 ? noDry : { ok: false, code: "unavailable", message: "down" }) });
+    expect(f.of("kinds")).toHaveLength(3);   // the first, then the second and its one retry (askOnce)
+    expect(r.asks.join("\n")).not.toContain("dry sabji");
+    expect(itemsOf(slot("Lunch"))).toContain("Dry sabji");
+  });
+
   it("a bare dosa is their Plain dosa; a bare upma stays a category", async () => {
     const { slot, names } = await walk();
     const parts = slot("Breakfast").templates.map((t: any) => t.parts);
@@ -1286,6 +1301,12 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     const weekly = (w: unknown[]) => ({ ...W_HOUSEHOLD, "household.weekly": w });
     expect(days(home([]), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue", "Wed"] }]))).toEqual(["Mon", "Tue", "Wed"]);
     expect(days(home([]), weekly([]))).toEqual(MON_FRI);
+    // Days at home are no carrying days (review): office Mon–Wed, home Thu–Fri.
+    expect(days(home([]), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue", "Wed"] }, { person: "Shiva", where: "home", weekdays: ["Thu", "Fri"] }])))
+      .toEqual(["Mon", "Tue", "Wed"]);
+    // Each entry's own lunch, with no reply: only the entry that carries.
+    expect(days(home([], []), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue"], lunch: "carries" },
+      { person: "Shiva", where: "site", weekdays: ["Wed", "Thu"], lunch: "away" }]))).toEqual(["Mon", "Tue"]);
     // household.weekly's own "carries", with nothing said in the replies.
     expect(days(home([], []), weekly([{ person: "Shiva", where: "office", weekdays: ["Mon", "Tue"], lunch: "carries" }]))).toEqual(["Mon", "Tue"]);
     expect(days(home(["Mon", "Wed"]), W_HOUSEHOLD)).toEqual(["Mon", "Wed"]);
@@ -1335,6 +1356,21 @@ describe("setup reads into the one meaning model (§5, §6.4)", () => {
     // A visit with neither a time nor a meal is no visit; a name the model gives stays hers.
     const { k: k2 } = await walk({ home: { ...home, cook: { ...home.cook, name: "Lakshmi", visits: [{ at: "morning" }, { meals: ["Dinner"] }] } } });
     expect(savedOf(k2.kit.db).cook).toMatchObject({ name: "Lakshmi", visits: [{ meals: ["Dinner"] }] });
+  });
+
+  it("a correction that says the cook no longer comes removes a cook saved without a name (F5 review)", async () => {
+    const NEW = "We don't have a cook any more.";
+    const more = (req: ModelRequest) => JSON.parse(req.user).transcript.includes(NEW);
+    const nameless = { ...W_HOME, cook: { days: MON_SAT, visits: [{ meals: ["Breakfast", "Lunch"] }, { meals: ["Dinner"] }], quote: "comes at 7 for breakfast and lunch" } };
+    const f = fake({ home: (req: ModelRequest) => (more(req) ? { ...nameless, cook: null } : nameless), rules: W_RULES, dishes: W_DISHES, often: W_OFTEN, kinds: W_KINDS,
+      contains: containsOf(), lint: { dishes: [] } });
+    const k = await boot({ model: f.model });
+    await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: W_TRANSCRIPT });
+    expect(savedOf(k.kit.db).cook).not.toBeNull();
+    const r = await k.op("apply_setup", { household: W_HOUSEHOLD, transcript: [...W_TRANSCRIPT, "Q: Anything to change?", `A: ${NEW}`] });
+    expect(r.ok).toBe(true);
+    expect(savedOf(k.kit.db).cook).toBeNull();
+    expect(r.said).toContain("No cook.");
   });
 
   it("the read-back says templates and rules in the family's words", async () => {

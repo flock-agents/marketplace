@@ -68,8 +68,10 @@ export function FamilyPage() {
     try { await send("family/people", { name: p.name, remove: true }); close(); void family.refetch(); toast.show({ message: `${p.name} is no longer in the family`, tone: "success" }); }
     catch (e) { toast.show({ message: `Couldn't save: ${why(e)}`, tone: "danger" }); }
   };
-  const cook = house.cook_name
-    ? [house.cook_name, house.cook_days.length ? cookingDaysText(house.cook_days) : null, cookVisitsText(house.cook_visits)].filter(Boolean).join(", ")
+  // A cook setup saved without a name (the family never named her) is there by her days: "Your cook".
+  const hasCook = !!house.cook_name || house.cook_days.length > 0;
+  const cook = hasCook
+    ? [house.cook_name ?? "Your cook", house.cook_days.length ? cookingDaysText(house.cook_days) : null, cookVisitsText(house.cook_visits, house.cook_meal_visits)].filter(Boolean).join(", ")
     : "No cook yet";
   /** The arrival as typed ("6:00, 16:30") as set_cook takes it: one time, or the visits, each keeping the meals it had. */
   const arrivalOf = (typed: unknown): string | { at: string; meals?: string[] }[] => {
@@ -107,7 +109,7 @@ export function FamilyPage() {
       <Section title="Cooking">
         <Detail fields={[
           { label: "Cook", value: cook },
-          ...(house.cook_name ? cookDetails(house) : []),
+          ...(hasCook ? cookDetails(house) : []),
           { label: "Meals planned", value: slots.length ? slots.map((s) => [s.name, s.days.length ? `on ${joined(s.days)}` : null, s.usual_people.length ? `for ${joined(s.usual_people)}` : null].filter(Boolean).join(" ")).join("; ") : "Breakfast, Lunch and Dinner" },
           { label: "Eaten out or ordered in every week", value: skipsText(slots) },
         ]} />
