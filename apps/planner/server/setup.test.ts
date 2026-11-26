@@ -2355,4 +2355,23 @@ describe("apply_setup: dish families (H7) and kind words with days (H8)", () => 
     expect((await k.op("apply_setup", { household: FAMILY, transcript: [...tr, "Q: Anything to change?", `A: ${NEW}`, "Q: More?", "A: Poha with peanuts."] })).ok).toBe(true);
     expect(plainThepla(await bf()).days).toEqual(["Sun"]);
   });
+  it("a kind word's days reach its template whether the dish's own row sorts before or after it (first setup)", async () => {
+    const pq = "Breakfast is plain paratha sometimes, and parathas at the weekend.", hq = "Dinner is plain thepla sometimes, and theplas at the weekend.";
+    const { tr, f } = setup([pq, hq],
+      [["Plain paratha", "Breakfast", pq], ["Paratha", "Breakfast", pq], ["Plain thepla", "Dinner", hq], ["Thepla", "Dinner", hq]],
+      [["Breakfast", "Plain paratha", pq], ["Breakfast", "Paratha", pq], ["Dinner", "Plain thepla", hq], ["Dinner", "Thepla", hq]],
+      [["Plain paratha", "Breakfast", pq, "sometimes", "sometimes", ""], ["Paratha", "Breakfast", pq, "at the weekend", "", "Sat,Sun"],
+        ["Plain thepla", "Dinner", hq, "sometimes", "sometimes", ""], ["Thepla", "Dinner", hq, "at the weekend", "", "Sat,Sun"]]);
+    const k = await boot({ model: f.model });
+    expect((await k.op("apply_setup", { household: FAMILY, transcript: tr })).ok).toBe(true);
+    const slots = (await k.owner("GET", "/api/family")).body.slots;
+    for (const [slot, dish] of [["Breakfast", "Plain paratha"], ["Dinner", "Plain thepla"]]) {
+      const ts = slots.find((s: any) => s.name === slot).templates;
+      const t = ts.find((t: any) => t.parts.some((p: any) => p.dish === dish));
+      expect(t?.days, `${slot}`).toEqual(["Sat", "Sun"]);
+      expect(t.parts.find((p: any) => p.dish === dish).words, `${slot}`).toBe(dish === "Plain paratha" ? "paratha" : "thepla");   // the word's, either order
+      // The dish named by its own name keeps its own words on its row.
+      expect(row(k, dish, slot)!.frequency, `${slot}`).toBe("sometimes");
+    }
+  });
 });

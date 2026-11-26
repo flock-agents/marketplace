@@ -2193,7 +2193,9 @@ export function writeKinds(tx: Db, plan: KindsPlan, placed: Map<string, Place>, 
       const key = dishKey(name), now = fresh.get(key), was = fresh.has(key) || bare || d.frequency || d.days?.length ? undefined : kept.get(key);
       const word = now ?? was;
       if (word) { how = { frequency: word.frequency, days: word.days, said: word.said }; words.set(key, word); }
-      if (dishes.some((x) => dishKey(x.name) === key)) continue;   // their word and the dish both said: one dish
+      // Their word and the dish both said: one dish, read with the word's place (its words are the template's), whichever came first.
+      const had = dishes.find((x) => dishKey(x.name) === key);
+      if (had) { if (bare && place) had.place = place; continue; }
       upsertLibrary(tx, { name, slot: d.slot, kind: place?.kind ?? null, sub: place?.sub ?? null, catalog_item: place?.parts ? null : place?.item ?? null }, by, changes);
       const swap = swapsHere.find((w) => w.keys.includes(dishKey(name)) || w.keys.includes(d.key));
       const qs = plan.quotes?.[placeKey(slot.name, d.key)];
