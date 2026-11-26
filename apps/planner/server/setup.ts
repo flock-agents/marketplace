@@ -967,15 +967,18 @@ function rowsFor(again: SetupRead, opts: { sentences: string[]; boxes: string[];
 }
 /** A dishes re-read laid on the read (fix round 1): its rows replace the same dish at the same meal (a seed: the same dishes; a
  *  link: the slot's link, so a slot never has two) and add the rest; a first-read row it leaves out is kept (the re-read is asked
- *  only for what was missing). A dish it puts at a box in place of a meal leaves that meal (fix 3: it sat there for want of the
- *  box; never in both). Meals by the checked slots. */
-export function mergeDishes(read: SetupRead, again: Pick<SetupRead, "library" | "seed" | "links">, opts: { slots: ReadSlot[] }):
+ *  only for what was missing). A dish it puts at a box in place of a meal leaves that meal when the first row's quote sits in a
+ *  family sentence with a box word (fix 3: the first read took the box's dish for the meal's); a dish said of both the meal and
+ *  the box stays in both (fix round 2). Meals by the checked slots; `sentences` the family's, in plain words. */
+export function mergeDishes(read: SetupRead, again: Pick<SetupRead, "library" | "seed" | "links">, opts: { slots: ReadSlot[]; sentences: string[] }):
   Pick<SetupRead, "library" | "seed" | "links"> {
   const names = opts.slots.map((x) => x.name), at = (slot: string) => resolveSlot(slot, names) ?? slot;
   const sameSlot = (a: string, b: string) => same(at(a), at(b));
   const replaced = (slot: string) => opts.slots.find((x) => x.kind === "custom" && x.instead_of && sameSlot(x.name, slot))?.instead_of ?? null;
+  const boxSentences = opts.sentences.filter((s) => plainWords(s).split(" ").some((w) => BOX_WORDS.includes(w)));
+  const saidOfBox = (d: ReadDish) => !!d.quote && boxSentences.some((s) => cites(d.quote, s));
   const gone = (d: ReadDish) => again.library.some((x) => dishKey(x.name) === dishKey(d.name)
-    && (sameSlot(x.slot, d.slot) || (!!replaced(x.slot) && sameSlot(replaced(x.slot)!, d.slot))));
+    && (sameSlot(x.slot, d.slot) || (!!replaced(x.slot) && sameSlot(replaced(x.slot)!, d.slot) && saidOfBox(d))));
   const sameSeed = (a: ReadSeed, b: ReadSeed) => sameSlot(a.slot, b.slot) && a.dishes.map(dishKey).join() === b.dishes.map(dishKey).join();
   return {
     library: [...read.library.filter((d) => !gone(d)), ...again.library],
@@ -2304,7 +2307,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
           const d = await reread(partOf("dishes"), { missing: [...added.map((x) => `what goes in ${x.name}`), ...unwritten], meals: checked.read.slots.map((x) => x.name) });
           const again = d.ok ? readOf(null, null, d.json, oftenJson) : null;
           if (again?.library.length) {
-            read = { ...read, ...mergeDishes(read, again, { slots: checked.read.slots }) };
+            read = { ...read, ...mergeDishes(read, again, { slots: checked.read.slots, sentences }) };
             checked = checkRead(read, { household, said, sentences, oftenFailed });
           } else log(`dishes re-read: ${d.ok ? "no dishes in the answer" : `model ${d.code}: ${d.message.slice(0, 200)}`}; the first dishes read stands`);
         } else boxAsks.push(...added.map((x) => boxAsk(x.name, x.instead_of!)));
@@ -2327,7 +2330,7 @@ export async function applySetup(deps: { db: Db; emit: Emit; model: ModelCall; p
     const r = await reread(partOf("dishes"), { missing: [...empty.map((b) => `what goes in ${b}`), ...unwritten] });
     if (r.ok) {
       const more = rowsFor(readOf(null, null, r.json, oftenJson), { sentences: unwritten, boxes: empty, meals: checked.read.slots.map((x) => x.name) });
-      read = { ...read, ...mergeDishes(read, more, { slots: checked.read.slots }) };
+      read = { ...read, ...mergeDishes(read, more, { slots: checked.read.slots, sentences }) };
       checked = checkRead(read, { household, said, sentences, oftenFailed });
     } else log(`dishes re-read: model ${r.code}: ${r.message.slice(0, 200)}`);
   }
