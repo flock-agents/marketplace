@@ -170,7 +170,7 @@ export async function readEvents(o: { events: CalendarEvent[] | null; dated: Dat
   if (!inWeek.length) return { changes: [], asked: [] };
   const asked = (h: Happening): EventAsk => ({ title: h.title, who: h.who,
     when: h.from === h.to ? weekdayOf(h.from) : `${weekdayOf(h.from < o.from ? o.from : h.from)} to ${weekdayOf(h.to > o.to ? o.to : h.to)}` });
-  const r = await o.model({ tier: "fast", purpose: "meal plan: calendar entries", system: EVENTS_SYSTEM, schema: EVENTS_SCHEMA, maxTokens: 1500,
+  const r = await o.model({ tier: "balanced", purpose: "meal plan: calendar entries", system: EVENTS_SYSTEM, schema: EVENTS_SCHEMA, maxTokens: 1500,
     user: JSON.stringify({ week: { from: o.from, to: o.to }, people: o.people, slots: o.slots, entries: inWeek }) });
   if (!r.ok) {
     o.log(`calendar read failed (${r.code}): ${inWeek.length} entr${inWeek.length === 1 ? "y" : "ies"} asked`);

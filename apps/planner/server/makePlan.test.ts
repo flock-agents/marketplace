@@ -98,7 +98,7 @@ describe("make_plan: the week filled by code from the templates", () => {
     const r = await k.plan(f.model, { log: (l) => lines.push(l) });
     if (!r.ok) throw new Error(r.say);
     expect(f.calls.map((c) => c.req.purpose)).toEqual(Array(7).fill("meal plan: a day's ingredients"));
-    expect(f.days().every((c) => c.req.tier === "fast" && c.req.system === INGREDIENT_SYSTEM)).toBe(true);
+    expect(f.days().every((c) => c.req.tier === "balanced" && c.req.system === INGREDIENT_SYSTEM)).toBe(true);
     expect(k.week()).toHaveLength(21);
     for (const d of k.week()) {
       expect(d.status).toBe("planned");
@@ -500,7 +500,7 @@ describe("make_plan: allergies (owner 25 Nov)", () => {
     const r = await k.plan(f.model);
     if (!r.ok) throw new Error(r.say);
     expect(f.calls.some((c) => c.req.purpose === "meal plan: what dishes contain, carefully (allergies)")).toBe(false);
-    expect(f.calls.every((c) => c.req.tier === "fast")).toBe(true);
+    expect(f.calls.every((c) => c.req.tier === "balanced")).toBe(true);
     // The family's own dish, read and still not known: planned for everyone, nobody kept from it.
     for (const d of WEEK) expect(k.at(d, "Breakfast")!.dishes.find((x) => x.dish === "Grandma's poha")!.not_for).toEqual([]);
     // Asked once for the week, the allergy first.
@@ -530,7 +530,7 @@ describe("make_plan: plan and ask (one meaning model, Task 10)", () => {
     if (!r.ok) throw new Error(r.say);
     expect(f.calls.map((c) => c.req.purpose)).not.toContain("meal plan: what dishes contain, carefully (allergies)");
     expect(f.days()).toHaveLength(7);
-    expect(f.calls.every((c) => c.req.tier === "fast")).toBe(true);
+    expect(f.calls.every((c) => c.req.tier === "balanced")).toBe(true);
     expect(k.at(MON, "Lunch")!.dishes.find((x) => x.dish === "Kadhi")!.not_for).toEqual([]);
     expect(r.asked).toHaveLength(1);
     expect(r.asked![0]).toContain("OK for");
@@ -812,7 +812,7 @@ describe("make_plan: who eats (spec §5.1)", () => {
       { id: "e2", effect: "joins", people: ["Nani"], dates: ["2026-12-05"], slots: ["Lunch", "Dinner"] }, { id: "e3", effect: "unsure" }] }) });
     const r = await k.plan(f.model, { peers: { calendar: async () => events } });
     expect(f.events()).toHaveLength(1);
-    expect(f.events()[0].req.tier).toBe("fast");
+    expect(f.events()[0].req.tier).toBe("balanced");
     expect(f.events()[0].user.entries.map((e: any) => e.id)).toEqual(["e1", "e2", "e3"]);
     expect(k.at("2026-12-01", "Breakfast")!.people).toEqual(["Asha", "Kabir"]);
     expect(k.at("2026-12-05", "Lunch")!.people).toEqual(["Asha", "Ravi", "Kabir", "Nani"]);

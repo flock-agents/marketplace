@@ -113,7 +113,7 @@ const lib = (k: Awaited<ReturnType<typeof boot>>) => Object.fromEntries(k.rows("
   { frequency: d.frequency, days: d.days ? JSON.parse(d.days) : null, contains: JSON.parse(d.contains), read: JSON.parse(d.contains_read), origin: d.origin }]));
 
 describe("apply_setup v2: the model reads, code checks and writes", () => {
-  it("four reads at once (home, dishes and how often on best, rules balanced), then contains on balanced; everything written in order and read back", async () => {
+  it("four reads at once, all balanced, then contains on balanced; everything written in order and read back", async () => {
     const f = fake();
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
@@ -121,7 +121,7 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(f.of("home").length + f.of("rules").length + f.of("dishes").length + f.of("often").length).toBe(4);
     for (const p of ["home", "rules", "dishes", "often"] as Part[]) {
       const a = f.of(p)[0];
-      expect(a.tier).toBe(p === "rules" ? "balanced" : "best");
+      expect(a.tier).toBe("balanced");
       expect(JSON.parse(a.user).household).toEqual(HOUSEHOLD);
       expect(JSON.parse(a.user).transcript).toContain("A2: actually Rani comes at 8:15");
     }

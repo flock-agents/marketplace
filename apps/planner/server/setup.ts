@@ -198,10 +198,10 @@ const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${E
  *  `tier`: the dishes read copies the family's words out, so it reads on fast (no reasoning): on balanced its reasoning ran into
  *  the token cap and cut the JSON off, twice in some setups (eval 2026-11-25: 3–11 s on fast vs 18–146 s, 94% vs 78% overall). */
 export const SETUP_PARTS = [
-  { id: "home", tier: "best", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
+  { id: "home", tier: "balanced", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
   { id: "rules", tier: "balanced", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
-  { id: "dishes", tier: "best", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
-  { id: "often", tier: "best", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
+  { id: "dishes", tier: "balanced", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
+  { id: "often", tier: "balanced", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
 ] as const;
 
 export const CONTAINS_SYSTEM = `For each dish, say for each tag whether the dish as usually cooked in an Indian home has it: true or false, for every tag asked, for every dish. Answer as { "<dish name as given>": { "<tag>": true | false } }.

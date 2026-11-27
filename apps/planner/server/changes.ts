@@ -116,7 +116,7 @@ function dishesOf(v: unknown, what: string): (SlotDishInput & { given: boolean }
 async function fillIngredients(deps: ChangeDeps, date: string, slot: string, count: number, dishes: (SlotDishInput & { given: boolean })[]): Promise<void> {
   const need = dishes.filter((d) => !d.given);
   if (!need.length) return;
-  const r = await deps.model({ tier: "fast", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 2000,
+  const r = await deps.model({ tier: "balanced", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 2000,
     user: JSON.stringify({ date, day: weekdayOf(date), dishes: need.map((d) => ({ slot, name: d.dish, people: Math.max(1, count) })) }) });
   if (!r.ok) return;
   for (const x of ingredientsFrom(r.json)) {

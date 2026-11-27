@@ -293,7 +293,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
   // The guests' food rules, in their words, read once into the tags they forbid (code then checks them like a person's).
   const guestWords = uniq(days.filter((d) => !d.fixed).flatMap((d) => d.guests.flatMap((g) => g.rules ?? [])).map((x) => x.trim().toLowerCase()).filter(Boolean));
   if (guestWords.length) {
-    const r = await model({ tier: "fast", purpose: "meal plan: guests' food rules", system: GUESTS_SYSTEM, schema: GUESTS_SCHEMA, maxTokens: 800,
+    const r = await model({ tier: "balanced", purpose: "meal plan: guests' food rules", system: GUESTS_SYSTEM, schema: GUESTS_SCHEMA, maxTokens: 800,
       user: JSON.stringify({ tags, rules: guestWords }) }, INGREDIENTS_RESERVE_MS);
     if (!r.ok) { log(`guests' rules read failed (${r.code}): not checked`); if (isStop(r.code)) return stopped(r); }
     else {
@@ -325,7 +325,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
     }
     for (const group of groups.values()) for (let i = 0; i < group.length; i += CONTAINS_BATCH) {
       const batch = group.slice(i, i + CONTAINS_BATCH), asked = batch[0].tags;
-      const r = await model({ tier: "fast", purpose: "meal plan: what dishes contain", system: CONTAINS_SYSTEM, schema: CONTAINS_SCHEMA, maxTokens: 3000,
+      const r = await model({ tier: "balanced", purpose: "meal plan: what dishes contain", system: CONTAINS_SYSTEM, schema: CONTAINS_SCHEMA, maxTokens: 3000,
         user: JSON.stringify({ dishes: batch.map((a) => a.row.name), tags: asked }) }, INGREDIENTS_RESERVE_MS);
       if (!r.ok) { log(`contains read failed (${r.code}) for ${batch.map((a) => a.row.name).join(", ")}`); if (isStop(r.code)) return r; continue; }
       const byKey = new Map(isObject(r.json) ? Object.entries(r.json).map(([k, v]) => [dishKey(k), v] as const) : []);
@@ -407,7 +407,7 @@ async function planWeek(deps: MakePlanDeps & { log: (line: string) => void }, in
       ...(avoidTags(d).length ? { tags: avoidTags(d) } : {}) })));
     const missing = () => dishes.filter((x) => !got.get(`${date}|${x.slot}|${dishKey(x.name)}`)?.length);
     for (let attempt = 0; attempt < 2 && missing().length; attempt++) {
-      const r = await model({ tier: "fast", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 4000,
+      const r = await model({ tier: "balanced", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 4000,
         user: JSON.stringify({ date, day: weekdayOf(date), dishes: attempt ? missing() : dishes }) }, SAVE_RESERVE_MS);
       if (!r.ok) { if (isStop(r.code)) return r; continue; }
       for (const x of ingredientsFrom(r.json)) {
