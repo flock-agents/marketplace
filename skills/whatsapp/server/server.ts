@@ -11,7 +11,7 @@ import { WhatsAppService, failureOf } from "./_whatsapp";
 import { clearAuth, loadAuth, realSocketFactory, type BaileysLib } from "./_socket";
 import { dataDirOf } from "./_limits";
 
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 const baileys = lib as unknown as BaileysLib;
 const dataDir = dataDirOf();
 const openSocket = realSocketFactory(baileys, process.env);

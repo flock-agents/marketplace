@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0
+
+- Reports the linked number, masked, so Flock can tell WhatsApp accounts apart: every answer from a linked WhatsApp (`link-status` and `link` once linked, `list-chats`, `read-chat`, `search`, `send-message`, and `unlink` for the number it unlinked) carries `signedInAs`, such as `+••••••••5678` (only the last 4 digits, never the whole number). No `signedInAs` when WhatsApp is not linked.
+
 ## 2.0.0
 
 Rebuilt on WhatsApp's own linked-device protocol (Baileys 7.0.0-rc14, bundled in `server/lib/baileys.bundle.js`) instead of WhatsApp Web in Flock's browser. Needs Flock 0.25.0-beta.8 or newer (local-connector egress, `MCP_DATA_DIR`, `{packageDir}`, `FLOCK_TIMEZONE` and connector call hooks).

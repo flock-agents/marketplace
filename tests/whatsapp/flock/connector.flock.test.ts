@@ -56,7 +56,7 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
   describe("install", () => {
     it("Flock's marketplace installer installs the package from this branch's files, checksums matching", async () => {
       const result = await flock.installWhatsApp();
-      expect(result).toMatchObject({ success: true, item: { slug: SKILL, type: "connector", version: "2.0.0" } });
+      expect(result).toMatchObject({ success: true, item: { slug: SKILL, type: "connector", version: "2.1.0" } });
       const { SKILLS_DIR } = await flockImport("skills-registry");
       pkgDir = join(SKILLS_DIR, SKILL);
       const { readChecksumManifest, computeChecksums, detectModifications } = await flockImport("marketplace/checksum");

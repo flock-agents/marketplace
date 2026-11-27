@@ -99,7 +99,7 @@ class Connection {
   timeCounted = false;
   private endCalled = false;
 
-  constructor(readonly sock: WASocketLike, auth: AuthHandle, store: Store, private readonly now: () => number) {
+  constructor(readonly sock: WASocketLike, readonly auth: AuthHandle, store: Store, private readonly now: () => number) {
     this.openedAt = now();
     const ev = sock.ev;
     ev.on("creds.update", () => { auth.saveCreds().catch(() => {}); });
@@ -181,6 +181,17 @@ export function phoneDigits(phone: unknown): string {
 }
 
 const masked = (digits: string) => `+${digits.slice(0, Math.max(0, digits.length - 4)).replace(/\d/g, "•")}${digits.slice(-4)}`;
+
+/** The linked account's own number in its WhatsApp user id (919812345678:3@s.whatsapp.net). */
+const OWN_JID = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/;
+
+/** Who the link is signed in as, for Flock to tell WhatsApp accounts apart: the linked number, masked
+ *  (never the whole number). None when not linked, or when the link holds no phone number. */
+export function signedInAsOf(auth: AuthHandle | undefined): string | undefined {
+  if (!auth?.registered()) return undefined;
+  const digits = OWN_JID.exec(String(auth.state.creds?.me?.id ?? ""))?.[1];
+  return digits ? masked(digits) : undefined;
+}
 
 /** A whole number param within [1, max], else `fallback`. */
 export function count(value: unknown, fallback: number, max: number): number {
@@ -363,9 +374,11 @@ export class WhatsAppService {
     }
   }
 
-  /** Each answer says how many minutes of WhatsApp time are left today. */
-  private answer<T extends Record<string, unknown>>(result: T): T & { minutesLeftToday: number } {
-    return { ...result, minutesLeftToday: this.minutesLeft() };
+  /** Each answer says how many minutes of WhatsApp time are left today, and, given the link it used,
+   *  who it is signed in as. */
+  private answer<T extends Record<string, unknown>>(result: T, auth?: AuthHandle): T & { minutesLeftToday: number; signedInAs?: string } {
+    const signedInAs = signedInAsOf(auth);
+    return { ...result, minutesLeftToday: this.minutesLeft(), ...(signedInAs ? { signedInAs } : {}) };
   }
 
   // --- Linking ---
@@ -412,7 +425,7 @@ export class WhatsAppService {
     return this.call("link", async () => {
       if (this.linkTask && !this.linkWaiting()) await this.linkTask;
       const current = await this.deps.loadAuth();
-      if (current.registered()) return this.answer({ linked: true, message: "WhatsApp is already linked. To link another number, `unlink` first." });
+      if (current.registered()) return this.answer({ linked: true, message: "WhatsApp is already linked. To link another number, `unlink` first." }, current);
       const mode: "code" | "qr" = params.qr === true || params.qr === "true" ? "qr" : "code";
       const digits = mode === "code" ? phoneDigits(params.phone) : "";
       if (this.linkWaiting()) await this.stopLink();
@@ -492,10 +505,11 @@ export class WhatsAppService {
     takeCall("link-status", this.limitOpts);
     const auth = await this.deps.loadAuth();
     const paused = pausedState(this.limitOpts);
+    const linked = auth.registered() && this.link?.phase !== "waiting";
     return this.answer({
-      linked: auth.registered() && this.link?.phase !== "waiting", link: this.linkView(), chats: this.store.chatCount,
+      linked, link: this.linkView(), chats: this.store.chatCount,
       ...(paused ? { paused: { kind: paused.kind, reason: paused.reason, since: new Date(paused.at).toISOString() } } : {}),
-    });
+    }, linked ? auth : undefined);
   }
 
   /** Unlinks: logs this device out of WhatsApp when it can, then forgets the link and every stored chat. */
@@ -504,6 +518,7 @@ export class WhatsAppService {
       await this.stopLink();
       this.link = null;
       const auth = await this.deps.loadAuth();
+      const signedInAs = signedInAsOf(auth);
       const paused = pausedState(this.limitOpts);
       let loggedOut = false;
       let note: string | undefined;
@@ -520,22 +535,22 @@ export class WhatsAppService {
       this.deps.clearAuth();
       this.store.clear();
       clearPause(this.limitOpts);
-      return this.answer({ unlinked: true, loggedOut, ...(note ? { note } : {}) });
+      return this.answer({ unlinked: true, loggedOut, ...(note ? { note } : {}), ...(signedInAs ? { signedInAs } : {}) });
     });
   }
 
   // --- Reads ---
 
-  /** A fresh read: on the session's connection, so the store has what arrived since. */
-  private async refresh(): Promise<void> {
-    await this.withConnection(async () => undefined);
+  /** A fresh read: on the session's connection, so the store has what arrived since. Gives the link it used. */
+  private async refresh(): Promise<AuthHandle> {
+    return this.withConnection(async (conn) => conn.auth);
   }
 
   async listChats(params: { max?: unknown }): Promise<Record<string, unknown>> {
     return this.call("list-chats", async () => {
-      await this.refresh();
+      const auth = await this.refresh();
       const chats = this.store.listChats(count(params.max, 20, 50));
-      return this.answer({ chats, ...(chats.length ? {} : { note: "No chats yet: WhatsApp sends the chat list just after linking, and new messages as they come." }) });
+      return this.answer({ chats, ...(chats.length ? {} : { note: "No chats yet: WhatsApp sends the chat list just after linking, and new messages as they come." }) }, auth);
     });
   }
 
@@ -552,13 +567,13 @@ export class WhatsAppService {
     if (!name || Array.isArray(params.chat)) fail("MISSING_PARAM", "Give chat: the chat's exact name as list-chats shows it.");
     const n = count(params.count, 10, 30);
     return this.call("read-chat", async () => {
-      await this.refresh();
+      const auth = await this.refresh();
       const chat = this.chatNamed(name);
       const messages = chat.messages.slice(-n).map((m) => ({
         from: m.from, time: new Date(m.at).toISOString(), text: m.text, mine: m.mine, ...(m.media ? { media: m.media } : {}),
       }));
       const thin = messages.length < n;
-      return this.answer({ chat: chat.name, kind: chat.kind, messages, ...(thin ? { note: "These are all the messages here: only a few from before WhatsApp was linked, then everything since." } : {}) });
+      return this.answer({ chat: chat.name, kind: chat.kind, messages, ...(thin ? { note: "These are all the messages here: only a few from before WhatsApp was linked, then everything since." } : {}) }, auth);
     });
   }
 
@@ -566,8 +581,8 @@ export class WhatsAppService {
     const query = text(params.query);
     if (!query) fail("MISSING_PARAM", "Give query: the words to look for.");
     return this.call("search", async () => {
-      await this.refresh();
-      return this.answer({ query, ...this.store.search(query, count(params.max, 10, 30)) });
+      const auth = await this.refresh();
+      return this.answer({ query, ...this.store.search(query, count(params.max, 10, 30)) }, auth);
     });
   }
 
@@ -595,7 +610,7 @@ export class WhatsAppService {
           fail("SEND_FAILED", `WhatsApp did not take the message (${(e as Error).message}). It may not have gone out: read the chat before sending again.`);
         }
         if (sent?.key) this.store.addMessages([{ ...sent, key: { ...sent.key, fromMe: true } }]);
-        return this.answer({ chat: chat.name, kind: isGroupJid(chat.jid) ? "group" : "person", sent: true, message: "Sent." });
+        return this.answer({ chat: chat.name, kind: isGroupJid(chat.jid) ? "group" : "person", sent: true, message: "Sent." }, conn.auth);
       });
     });
   }

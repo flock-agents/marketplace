@@ -61,13 +61,17 @@ export interface World {
   sleeps: number[];
 }
 
-/** A service on a fresh data folder. `linked`: a finished link is saved already. */
-export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; timings?: Partial<Timings>; random?: () => number; now?: () => number } = {}): World {
+/** The linked account's own WhatsApp user id the pretend link holds (its device 7). */
+export const OWN_JID = "919876545678:7@s.whatsapp.net";
+
+/** A service on a fresh data folder. `linked`: a finished link is saved already. `me`: the link's own
+ *  user id (OWN_JID by default; it only counts once linked, as in Baileys). */
+export function world(script: (sock: MockSocket, n: number, w: World) => void, opts: { linked?: boolean; me?: string; timings?: Partial<Timings>; random?: () => number; now?: () => number } = {}): World {
   const dir = mkdtempSync(join(tmpdir(), "wa-service-"));
   const auth = { linked: !!opts.linked, cleared: 0, saved: 0 };
   const sockets: MockSocket[] = [];
   const qrImages: string[] = [];
-  const handle = (): AuthHandle => ({ state: { creds: {}, keys: {} }, saveCreds: async () => { auth.saved++; }, registered: () => auth.linked });
+  const handle = (): AuthHandle => ({ state: { creds: { me: { id: opts.me ?? OWN_JID } }, keys: {} }, saveCreds: async () => { auth.saved++; }, registered: () => auth.linked });
   const sleeps: number[] = [];
   const w = { dir, sockets, auth, qrImages, sleeps } as World;
   w.wa = new WhatsAppService({

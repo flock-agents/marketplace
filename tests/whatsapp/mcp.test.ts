@@ -9,6 +9,8 @@ import { join } from "path";
 import { handle } from "../../skills/whatsapp/server/_mcp";
 import { bunAtLeast } from "../../skills/whatsapp/server/_socket";
 import { whatsappTools } from "../../skills/whatsapp/server/_tools";
+import { failureOf } from "../../skills/whatsapp/server/_whatsapp";
+import { linkedWorld } from "./_mock";
 
 const server = join(import.meta.dir, "../../skills/whatsapp/server/server.ts");
 const dataDir = mkdtempSync(join(tmpdir(), "wa-mcp-"));
@@ -42,7 +44,7 @@ describe("the stdio server", () => {
       { jsonrpc: "2.0", id: 9, method: "resources/list" },
     ]);
     expect(code).toBe(0);
-    expect(replies.get(1).result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "whatsapp", version: "2.0.0" } });
+    expect(replies.get(1).result).toMatchObject({ protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "whatsapp", version: "2.1.0" } });
     const tools = replies.get(2).result.tools;
     expect(tools.map((t: any) => t.name)).toEqual(["link", "link-status", "list-chats", "read-chat", "search", "send-message", "unlink"]);
     for (const t of tools) { expect(t.inputSchema.type).toBe("object"); expect(t.description.length).toBeGreaterThan(10); }
@@ -51,6 +53,7 @@ describe("the stdio server", () => {
     const status = replies.get(4).result;
     expect(status.isError).toBeUndefined();
     expect(status.structuredContent).toMatchObject({ linked: false, link: { phase: "none" } });
+    expect(status.structuredContent.signedInAs).toBeUndefined();
     expect(JSON.parse(status.content[0].text)).toEqual(status.structuredContent);
     expect(replies.get(5).result).toMatchObject({ isError: true, structuredContent: { error: "NOT_LINKED" } });
     expect(replies.get(6).result).toMatchObject({ isError: true, structuredContent: { error: "ONE_RECIPIENT" } });
@@ -132,5 +135,18 @@ describe("stopping", () => {
     await new Response(proc.stdout).body!.getReader().read();
     proc.kill("SIGTERM");
     expect(await proc.exited).toBe(0);
+  });
+});
+
+describe("signedInAs in a tool answer", () => {
+  it("sits at the top of structuredContent (where Flock reads it), masked", async () => {
+    const w = linkedWorld();
+    try {
+      const r: any = await handle(call(1, "list-chats"), whatsappTools(w.wa), { name: "whatsapp", version: "2.1.0" }, failureOf);
+      expect(r.result.isError).toBeUndefined();
+      expect(r.result.structuredContent.signedInAs).toBe("+••••••••5678");
+      expect(JSON.parse(r.result.content[0].text).signedInAs).toBe("+••••••••5678");
+      expect(JSON.stringify(r)).not.toContain("919876545678");
+    } finally { w.wa.shutdown(); rmSync(w.dir, { recursive: true, force: true }); }
   });
 });
