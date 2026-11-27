@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-25T00:00:00Z",
+  "updatedAt": "2026-11-27T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -375,11 +375,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/whatsapp",
-      "latestVersion": "2.0.0",
-      "latestTag": "whatsapp-v2.0.0-rc1",
+      "latestVersion": "2.1.0",
+      "latestTag": "whatsapp-v2.1.0-rc1",
       "minFlockVersion": "0.25.0-beta.8",
       "publishedAt": "2026-11-25T00:00:00Z",
-      "updatedAt": "2026-11-26T00:00:00Z"
+      "updatedAt": "2026-11-27T00:00:00Z"
     },
     {
       "slug": "slack-desk",

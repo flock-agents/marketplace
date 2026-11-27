@@ -11,7 +11,9 @@
  * Media is never downloaded and profile pictures and presence are never asked for: no code here or in
  * the server calls them.
  */
+import { spawnSync } from "child_process";
 import { chmodSync, mkdirSync, readdirSync, rmdirSync, unlinkSync } from "fs";
+import { platform, release } from "os";
 import { join } from "path";
 import { isIgnoredJid } from "./_messages";
 
@@ -43,8 +45,36 @@ export interface BaileysLib {
   qrToDataURL: (text: string, opts?: any) => Promise<string>;
 }
 
-/** The device name the person sees in Linked devices: "Chrome (Flock)". */
-export const BROWSER: [string, string, string] = ["Flock", "Chrome", "2.0.0"];
+/** The machine the connector runs on: the same one Flock's browser runs on. */
+export interface Host { platform: string; release: string; macVersion(): string }
+
+/** Baileys' names for an OS (its `Browsers`: "Mac OS", "Windows"); a Linux host says just "Linux". */
+const OS_NAMES: Record<string, string> = { linux: "Linux", darwin: "Mac OS", win32: "Windows", freebsd: "FreeBSD", openbsd: "OpenBSD", aix: "AIX", sunos: "Solaris" };
+
+/** macOS's own version (15.4), or "" when it cannot be read. */
+const macProductVersion = (): string => {
+  try { return spawnSync("sw_vers", ["-productVersion"], { encoding: "utf8", timeout: 2_000 }).stdout?.trim() ?? ""; } catch { return ""; }
+};
+
+const thisHost: Host = { platform: platform(), release: release(), macVersion: macProductVersion };
+
+/**
+ * Who the connector says it is, as Baileys' [OS, browser, OS version]: Chrome on the machine's real OS,
+ * as Flock's browser is (Linux on a cloud Flock, macOS on a Mac), never a made-up one. macOS gives its
+ * own version (the kernel's means nothing to a person), any other OS its kernel release.
+ */
+export function browserOf(host: Host = thisHost): [string, string, string] {
+  const os = OS_NAMES[host.platform] ?? host.platform;
+  const version = host.platform === "darwin" ? host.macVersion() || host.release : host.release;
+  return [os, "Chrome", version];
+}
+
+/** This machine's tuple, worked out once. */
+export const BROWSER = browserOf();
+
+/** The device name the person sees in Linked devices: WhatsApp shows a link code's device as
+ *  "<browser> (<OS>)", such as "Chrome (Linux)". */
+export const deviceNameOf = (browser: readonly string[] = BROWSER): string => `${browser[1]} (${browser[0]})`;
 
 /** The egress proxy Flock gives this server, or "" for direct. */
 export const proxyOf = (env: Record<string, string | undefined>): string => env.HTTPS_PROXY || env.https_proxy || "";

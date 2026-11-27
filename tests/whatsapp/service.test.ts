@@ -5,9 +5,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, phoneDigits } from "../../skills/whatsapp/server/_whatsapp";
+import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, maskedWithCode, phoneDigits, signedInAsOf } from "../../skills/whatsapp/server/_whatsapp";
 import { LIMITS, pause } from "../../skills/whatsapp/server/_limits";
-import { codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
+import { deviceNameOf } from "../../skills/whatsapp/server/_socket";
+import { OWN_JID, codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
 
 const made: World[] = [];
 const track = (w: World) => { made.push(w); return w; };
@@ -235,6 +236,8 @@ describe("when WhatsApp pushes back: pause, never retry", () => {
     const out: any = await w.wa.unlink();
     expect(out).toMatchObject({ unlinked: true, loggedOut: false });
     expect(out.note).toMatch(/paused/);
+    expect(out.note).toContain(`remove "${deviceNameOf()}" in Linked devices`);
+    expect(out.note).not.toContain("(Flock)");
     expect(w.sockets.length).toBe(1);
     expect(limits(w).paused).toBeNull();
   });
@@ -689,5 +692,85 @@ describe("unlink", () => {
     expect(w.sockets.at(-1)!.loggedOut).toBe(true);
     expect(w.auth.linked).toBe(false);
     expect(w.wa.store.chatCount).toBe(0);
+  });
+});
+
+describe("who it is signed in as (signedInAs)", () => {
+  const MASKED = "+91••••••5678";
+  const wholeNumber = /919876545678|98765456/;
+
+  it("every answer from a linked WhatsApp carries the linked number, masked, never the whole number", async () => {
+    const w = track(linkedWorld());
+    const answers: any[] = [
+      await w.wa.linkStatus(),
+      await w.wa.startLink({ phone: "919876545678" }),
+      await w.wa.listChats({}),
+      await w.wa.readChat({ chat: "Mom" }),
+      await w.wa.search({ query: "dinner" }),
+      await w.wa.sendMessage({ chat: "Mom", text: "On my way" }),
+      await w.wa.unlink(),
+    ];
+    for (const out of answers) {
+      expect(out.signedInAs).toBe(MASKED);
+      expect(JSON.stringify(out)).not.toMatch(wholeNumber);
+    }
+  });
+
+  it("none when WhatsApp is not linked, or while a link waits for the person", async () => {
+    const w = track(world((sock) => sock.qr()));
+    expect((await w.wa.linkStatus() as any).signedInAs).toBeUndefined();
+    const started: any = await w.wa.startLink({ phone: "919876545678" });
+    expect(started.signedInAs).toBeUndefined();
+    w.auth.linked = true;
+    const waiting: any = await w.wa.linkStatus();
+    expect(waiting.linked).toBe(false);
+    expect(waiting.signedInAs).toBeUndefined();
+    w.auth.linked = false;
+    expect((await w.wa.unlink() as any).signedInAs).toBeUndefined();
+    expect((await w.wa.linkStatus() as any).signedInAs).toBeUndefined();
+  });
+
+  it("once a link finishes, the status says who it linked", async () => {
+    const w = track(world((sock, n, w) => {
+      if (n === 0) { sock.qr(); setTimeout(() => { w.auth.linked = true; sock.close(515, "restart required"); }, 20); }
+      else sock.open();
+    }));
+    await w.wa.startLink({ phone: "919876545678" });
+    for (let i = 0; i < 50 && (await w.wa.linkStatus() as any).link.phase === "waiting"; i++) await sleep(10);
+    const status: any = await w.wa.linkStatus();
+    expect(status).toMatchObject({ linked: true, signedInAs: MASKED });
+  });
+
+  it("only from the link's own phone-number id, with its device stripped", () => {
+    const link = (id: unknown, linked = true) => ({ state: { creds: { me: { id } }, keys: {} }, saveCreds: async () => {}, registered: () => linked });
+    expect(signedInAsOf(link(OWN_JID))).toBe(MASKED);
+    expect(signedInAsOf(link("919876545678@s.whatsapp.net"))).toBe(MASKED);
+    expect(signedInAsOf(link(OWN_JID, false))).toBeUndefined();
+    expect(signedInAsOf(link("12345678901234:3@lid"))).toBeUndefined();
+    expect(signedInAsOf(link(undefined))).toBeUndefined();
+    expect(signedInAsOf(link("not a jid"))).toBeUndefined();
+    expect(signedInAsOf(undefined)).toBeUndefined();
+  });
+
+  it("shows the country calling code and the last 4 digits, the middle hidden", () => {
+    expect(maskedWithCode("919876545678")).toBe("+91••••••5678");
+    expect(maskedWithCode("14155552671")).toBe("+1••••••2671");
+    expect(maskedWithCode("971501234567")).toBe("+971•••••4567");
+    expect(maskedWithCode("447911123456")).toBe("+44••••••3456");
+    expect(maskedWithCode("79161234567")).toBe("+7••••••4567");
+  });
+
+  it("an unknown calling code hides everything but the last 4", () => {
+    expect(maskedWithCode("99912345678")).toBe("+•••••••5678");
+    expect(maskedWithCode("28012345678")).toBe("+•••••••5678");
+  });
+
+  it("never the whole number, whatever its length", () => {
+    for (const digits of ["91987654", "9719876543", "12025550123", "919876545678", "971501234567890", "99912345"]) {
+      const out = maskedWithCode(digits);
+      expect(out).not.toContain(digits);
+      expect(out.replace(/\D/g, "").length).toBeLessThan(digits.length);
+      expect(out.endsWith(digits.slice(-4))).toBe(true);
+    }
   });
 });

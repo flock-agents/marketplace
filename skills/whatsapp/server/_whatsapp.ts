@@ -14,7 +14,7 @@ import {
 import { Store, type StoredChat } from "./_store";
 import { isGroupJid } from "./_messages";
 import { LINK_CODE_STEPS, LINK_QR_STEPS, QR_MESSAGE, linkCodeMessage } from "./_guide";
-import type { AuthHandle, WASocketLike } from "./_socket";
+import { deviceNameOf, type AuthHandle, type WASocketLike } from "./_socket";
 
 /** A refusal the agent reads: a code and plain words. */
 export class Fail extends Error { constructor(public code: string, msg: string) { super(msg); } }
@@ -99,7 +99,7 @@ class Connection {
   timeCounted = false;
   private endCalled = false;
 
-  constructor(readonly sock: WASocketLike, auth: AuthHandle, store: Store, private readonly now: () => number) {
+  constructor(readonly sock: WASocketLike, readonly auth: AuthHandle, store: Store, private readonly now: () => number) {
     this.openedAt = now();
     const ev = sock.ev;
     ev.on("creds.update", () => { auth.saveCreds().catch(() => {}); });
@@ -181,6 +181,50 @@ export function phoneDigits(phone: unknown): string {
 }
 
 const masked = (digits: string) => `+${digits.slice(0, Math.max(0, digits.length - 4)).replace(/\d/g, "•")}${digits.slice(-4)}`;
+
+/** The linked account's own number in its WhatsApp user id (919812345678:3@s.whatsapp.net). */
+const OWN_JID = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/;
+
+/** The ITU country calling codes in use. No code is the start of another, so a number's code is the one
+ *  of these it starts with. */
+const CALLING_CODES = new Set(`
+  1 7
+  20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66
+  81 82 84 86 90 91 92 93 94 95 98
+  211 212 213 216 218 220 221 222 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239
+  240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255 256 257 258 260 261 262 263 264 265
+  266 267 268 269 290 291 297 298 299
+  350 351 352 353 354 355 356 357 358 359 370 371 372 373 374 375 376 377 378 379 380 381 382 383 385
+  386 387 389 420 421 423
+  500 501 502 503 504 505 506 507 508 509 590 591 592 593 594 595 596 597 598 599
+  670 672 673 674 675 676 677 678 679 680 681 682 683 685 686 687 688 689 690 691 692
+  800 808 850 852 853 855 856 870 878 880 881 882 883 886 888
+  960 961 962 963 964 965 966 967 968 970 971 972 973 974 975 976 977 979 992 993 994 995 996 998
+`.trim().split(/\s+/));
+
+/** A number's country calling code (1 to 3 digits), or "" when it starts with none in use. */
+export function callingCodeOf(digits: string): string {
+  for (let len = 1; len <= 3; len++) if (CALLING_CODES.has(digits.slice(0, len))) return digits.slice(0, len);
+  return "";
+}
+
+/** A number with its calling code and last 4 digits shown and the rest hidden (+91••••••5678); all but
+ *  the last 4 hidden when the code is unknown or nothing would be left to hide. */
+export function maskedWithCode(digits: string): string {
+  const code = callingCodeOf(digits);
+  const hidden = digits.length - code.length - 4;
+  if (!code || hidden < 1) return masked(digits);
+  return `+${code}${"•".repeat(hidden)}${digits.slice(-4)}`;
+}
+
+/** Who the link is signed in as, for Flock to tell WhatsApp accounts apart: the linked number with its
+ *  calling code and last 4 digits (never the whole number). None when not linked, or when the link holds
+ *  no phone number. */
+export function signedInAsOf(auth: AuthHandle | undefined): string | undefined {
+  if (!auth?.registered()) return undefined;
+  const digits = OWN_JID.exec(String(auth.state.creds?.me?.id ?? ""))?.[1];
+  return digits ? maskedWithCode(digits) : undefined;
+}
 
 /** A whole number param within [1, max], else `fallback`. */
 export function count(value: unknown, fallback: number, max: number): number {
@@ -363,9 +407,11 @@ export class WhatsAppService {
     }
   }
 
-  /** Each answer says how many minutes of WhatsApp time are left today. */
-  private answer<T extends Record<string, unknown>>(result: T): T & { minutesLeftToday: number } {
-    return { ...result, minutesLeftToday: this.minutesLeft() };
+  /** Each answer says how many minutes of WhatsApp time are left today, and, given the link it used,
+   *  who it is signed in as. */
+  private answer<T extends Record<string, unknown>>(result: T, auth?: AuthHandle): T & { minutesLeftToday: number; signedInAs?: string } {
+    const signedInAs = signedInAsOf(auth);
+    return { ...result, minutesLeftToday: this.minutesLeft(), ...(signedInAs ? { signedInAs } : {}) };
   }
 
   // --- Linking ---
@@ -412,7 +458,7 @@ export class WhatsAppService {
     return this.call("link", async () => {
       if (this.linkTask && !this.linkWaiting()) await this.linkTask;
       const current = await this.deps.loadAuth();
-      if (current.registered()) return this.answer({ linked: true, message: "WhatsApp is already linked. To link another number, `unlink` first." });
+      if (current.registered()) return this.answer({ linked: true, message: "WhatsApp is already linked. To link another number, `unlink` first." }, current);
       const mode: "code" | "qr" = params.qr === true || params.qr === "true" ? "qr" : "code";
       const digits = mode === "code" ? phoneDigits(params.phone) : "";
       if (this.linkWaiting()) await this.stopLink();
@@ -492,10 +538,11 @@ export class WhatsAppService {
     takeCall("link-status", this.limitOpts);
     const auth = await this.deps.loadAuth();
     const paused = pausedState(this.limitOpts);
+    const linked = auth.registered() && this.link?.phase !== "waiting";
     return this.answer({
-      linked: auth.registered() && this.link?.phase !== "waiting", link: this.linkView(), chats: this.store.chatCount,
+      linked, link: this.linkView(), chats: this.store.chatCount,
       ...(paused ? { paused: { kind: paused.kind, reason: paused.reason, since: new Date(paused.at).toISOString() } } : {}),
-    });
+    }, linked ? auth : undefined);
   }
 
   /** Unlinks: logs this device out of WhatsApp when it can, then forgets the link and every stored chat. */
@@ -504,6 +551,7 @@ export class WhatsAppService {
       await this.stopLink();
       this.link = null;
       const auth = await this.deps.loadAuth();
+      const signedInAs = signedInAsOf(auth);
       const paused = pausedState(this.limitOpts);
       let loggedOut = false;
       let note: string | undefined;
@@ -511,31 +559,31 @@ export class WhatsAppService {
         try {
           await this.withConnection(async (conn) => { await conn.sock.logout(); loggedOut = true; });
         } catch (e) {
-          note = `Could not tell WhatsApp (${(e as Error).message}); the link was forgotten here. The person can remove "Chrome (Flock)" in Linked devices on their phone.`;
+          note = `Could not tell WhatsApp (${(e as Error).message}); the link was forgotten here. The person can remove "${deviceNameOf()}" in Linked devices on their phone.`;
         }
       } else if (auth.registered()) {
-        note = `WhatsApp was paused, so it was not contacted; the link was forgotten here. The person can remove "Chrome (Flock)" in Linked devices on their phone.`;
+        note = `WhatsApp was paused, so it was not contacted; the link was forgotten here. The person can remove "${deviceNameOf()}" in Linked devices on their phone.`;
       }
       this.endSession();
       this.deps.clearAuth();
       this.store.clear();
       clearPause(this.limitOpts);
-      return this.answer({ unlinked: true, loggedOut, ...(note ? { note } : {}) });
+      return this.answer({ unlinked: true, loggedOut, ...(note ? { note } : {}), ...(signedInAs ? { signedInAs } : {}) });
     });
   }
 
   // --- Reads ---
 
-  /** A fresh read: on the session's connection, so the store has what arrived since. */
-  private async refresh(): Promise<void> {
-    await this.withConnection(async () => undefined);
+  /** A fresh read: on the session's connection, so the store has what arrived since. Gives the link it used. */
+  private async refresh(): Promise<AuthHandle> {
+    return this.withConnection(async (conn) => conn.auth);
   }
 
   async listChats(params: { max?: unknown }): Promise<Record<string, unknown>> {
     return this.call("list-chats", async () => {
-      await this.refresh();
+      const auth = await this.refresh();
       const chats = this.store.listChats(count(params.max, 20, 50));
-      return this.answer({ chats, ...(chats.length ? {} : { note: "No chats yet: WhatsApp sends the chat list just after linking, and new messages as they come." }) });
+      return this.answer({ chats, ...(chats.length ? {} : { note: "No chats yet: WhatsApp sends the chat list just after linking, and new messages as they come." }) }, auth);
     });
   }
 
@@ -552,13 +600,13 @@ export class WhatsAppService {
     if (!name || Array.isArray(params.chat)) fail("MISSING_PARAM", "Give chat: the chat's exact name as list-chats shows it.");
     const n = count(params.count, 10, 30);
     return this.call("read-chat", async () => {
-      await this.refresh();
+      const auth = await this.refresh();
       const chat = this.chatNamed(name);
       const messages = chat.messages.slice(-n).map((m) => ({
         from: m.from, time: new Date(m.at).toISOString(), text: m.text, mine: m.mine, ...(m.media ? { media: m.media } : {}),
       }));
       const thin = messages.length < n;
-      return this.answer({ chat: chat.name, kind: chat.kind, messages, ...(thin ? { note: "These are all the messages here: only a few from before WhatsApp was linked, then everything since." } : {}) });
+      return this.answer({ chat: chat.name, kind: chat.kind, messages, ...(thin ? { note: "These are all the messages here: only a few from before WhatsApp was linked, then everything since." } : {}) }, auth);
     });
   }
 
@@ -566,8 +614,8 @@ export class WhatsAppService {
     const query = text(params.query);
     if (!query) fail("MISSING_PARAM", "Give query: the words to look for.");
     return this.call("search", async () => {
-      await this.refresh();
-      return this.answer({ query, ...this.store.search(query, count(params.max, 10, 30)) });
+      const auth = await this.refresh();
+      return this.answer({ query, ...this.store.search(query, count(params.max, 10, 30)) }, auth);
     });
   }
 
@@ -595,7 +643,7 @@ export class WhatsAppService {
           fail("SEND_FAILED", `WhatsApp did not take the message (${(e as Error).message}). It may not have gone out: read the chat before sending again.`);
         }
         if (sent?.key) this.store.addMessages([{ ...sent, key: { ...sent.key, fromMe: true } }]);
-        return this.answer({ chat: chat.name, kind: isGroupJid(chat.jid) ? "group" : "person", sent: true, message: "Sent." });
+        return this.answer({ chat: chat.name, kind: isGroupJid(chat.jid) ? "group" : "person", sent: true, message: "Sent." }, conn.auth);
       });
     });
   }
