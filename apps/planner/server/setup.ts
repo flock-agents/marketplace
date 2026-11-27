@@ -323,7 +323,9 @@ export type WeekdayLunch = { person: string; lunch: "away" | "carries" | "home";
  *  on them. `said`: the family's phrase they sit in ("rajma or chole twice a week"), kept for the plan call. */
 export type ReadDish = { name: string; slot: string; frequency: Frequency | null; days: Weekday[] | null; quote: string; often: string; said?: string;
   /** Set by the checks: the family sentence (index) that backs `often`; `shared`: its words were dropped as a whole list's. */
-  oftenAt?: number; shared?: boolean };
+  oftenAt?: number; shared?: boolean;
+  /** The how-often row's own quote: the clause the family said the words in (the dishes read's quote may be the whole sentence). */
+  oftenQuote?: string };
 export type ReadSeed = { slot: string; dishes: string[]; quote: string };
 export type ReadRule = RuleInput;
 /** What the four reads give, merged; after the checks, every name and slot is known. */
@@ -401,8 +403,12 @@ function withOften(library: ReadDish[], often: ReadDish[]): ReadDish[] {
   const pick = (xs: ReadDish[], f: ReadDish) => { const at = xs.filter((x) => same(x.slot, f.slot)); return at.length ? at : xs.length === 1 ? xs : []; };
   for (const f of often) {
     const exact = out.filter((d) => dishKey(d.name) === dishKey(f.name));
-    for (const d of exact.length ? pick(exact, f) : pick(out.filter((x) => holds(x.name, f.name)), f))
-      Object.assign(d, { frequency: f.frequency, days: f.days, often: f.often, said: saidOf(f.often, [f.quote, d.quote]) });
+    for (const d of exact.length ? pick(exact, f) : pick(out.filter((x) => holds(x.name, f.name)), f)) {
+      // The words column left empty with a day or count given: the clause the family said it in is the words (backHowOften then
+      // checks them in the family's sentence as always). The row's own quote tells one clause's dishes from another's (dropShared).
+      const often = f.often || (f.frequency || f.days ? f.quote : "");
+      Object.assign(d, { frequency: f.frequency, days: f.days, often, oftenQuote: f.quote, said: saidOf(often, [f.quote, d.quote]) });
+    }
   }
   return out;
 }
@@ -554,7 +560,7 @@ export function backHowOften(d: ReadDish, said: string[], slotDays: Weekday[], d
   const at = withQuote >= 0 ? withQuote : d.often ? said.findIndex((l) => wordsIn(l, d.often) && namedIn(d.name, [l])) : -1;
   d.oftenAt = at >= 0 ? at : undefined;
   if (at < 0) { dropped.push(`how often for ${d.name} ${what()}: ${d.often ? `"${d.often}" is not said with it` : "no words of the family say it"}`); d.frequency = null; d.days = null; return; }
-  if (d.days && !hasDayWord(d.often)) { dropped.push(`days for ${d.name} (${d.days.join(", ")}): no day in "${d.often}"`); d.days = null; }
+  if (d.days && !hasDayWord(d.often) && !hasDayWord(d.oftenQuote || d.quote)) { dropped.push(`days for ${d.name} (${d.days.join(", ")}): no day in "${d.often}"`); d.days = null; }
   if (d.days && slotDays.length && d.days.length === slotDays.length && d.days.every((x) => slotDays.includes(x))) { dropped.push(`days for ${d.name}: the meal's own days`); d.days = null; }
   if (d.frequency === "daily" && !hasDayWord(d.often)) { dropped.push(`daily for ${d.name}: "${d.often}" says no day`); d.frequency = null; }
   if (d.frequency?.endsWith("/week") && !hasCount(d.often)) { dropped.push(`${d.frequency} for ${d.name}: no count in "${d.often}"`); d.frequency = null; }
@@ -568,7 +574,7 @@ export const SHARED_OFTEN_MIN = 3;
 export function dropShared(library: ReadDish[], dropped: string[]): void {
   const groups = new Map<string, ReadDish[]>();
   for (const d of library) if ((d.frequency || d.days) && d.oftenAt !== undefined) {
-    const k = `${d.oftenAt}|${plainWords(d.often)}`;
+    const k = `${d.oftenAt}|${plainWords(d.often)}|${plainWords(d.oftenQuote ?? "")}`;
     groups.set(k, [...(groups.get(k) ?? []), d]);
   }
   // Counted by dish, not by row: "paratha on Sunday" read at three meals is one dish's days.
@@ -799,7 +805,7 @@ export function checkRead(read: SetupRead, ctx: { household: Household; said: st
       had.frequency ??= d.frequency;
       if (d.days) had.days = WEEKDAYS.filter((x) => had.days?.includes(x) || d.days!.includes(x));
       if ((d.frequency || d.days) && d.said && d.said !== had.said) had.said = had.said && (had.frequency || had.days) ? `${had.said}; ${d.said}` : d.said;
-      if (!had.often && d.often) Object.assign(had, { often: d.often, oftenAt: d.oftenAt });
+      if (!had.often && d.often) Object.assign(had, { often: d.often, oftenAt: d.oftenAt, oftenQuote: d.oftenQuote });
       continue;
     }
     library.push(d);

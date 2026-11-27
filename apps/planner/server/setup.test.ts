@@ -579,6 +579,29 @@ describe("apply_setup v2: the checks, pure", () => {
     expect(Object.fromEntries(c.read.library.map((d) => [d.name, d.frequency]))).toEqual({ Rice: null, Sambar: null, Curd: null, Rajma: "2/week", "Beans poriyal": null });
     expect(c.dropped.join("\n")).toContain("is said of the whole list");
   });
+  // Systematic drops, held-out h15-h17 (27 Nov), the often read's real answers replayed offline.
+  const REAL_HELD = ["A: Puttu and kadala curry twice, appam with egg roast twice, idiyappam with stew once, dosa with coconut chutney once.",
+    "A: Sunday dinner we order on Swiggy. Sunday was chicken biryani, as usual.", "A: Sunday puri sabzi."];
+  const heldRead = (library: string[][], often: string[][]) => {
+    const sentences = familySentences(REAL_HELD, {});
+    const read = readOf({}, {}, { library }, { often });
+    return checkRead(base({ library: read.library }), { household: hh, said: familyLines(REAL_HELD, {}), sentences });
+  };
+  it("one count said clause by clause in one sentence is each clause's dishes', not a whole list's (h16 puttu, kadala curry)", () => {
+    const q1 = "Puttu and kadala curry twice", q2 = "appam with egg roast twice";
+    const c = heldRead([["Puttu", "Breakfast", q1], ["Kadala curry", "Breakfast", q1], ["Appam", "Breakfast", q2], ["Egg roast", "Breakfast", q2]],
+      [["Puttu", "Breakfast", q1, "twice", "2/week", ""], ["Kadala curry", "Breakfast", q1, "twice", "2/week", ""], ["Appam", "Breakfast", q2, "twice", "2/week", ""], ["Egg roast", "Breakfast", q2, "twice", "2/week", ""]]);
+    expect(c.read.library.map((d) => [d.name, d.frequency])).toEqual([["Puttu", "2/week"], ["Kadala curry", "2/week"], ["Appam", "2/week"], ["Egg roast", "2/week"]]);
+  });
+  it("a day said in the dish's own clause backs its days when the often words are 'as usual' (h16 chicken biryani)", () => {
+    const q = "Sunday was chicken biryani, as usual";
+    const c = heldRead([["Chicken biryani", "Lunch", q]], [["Chicken biryani", "Lunch", q, "as usual", "", "Sun"]]);
+    expect(c.read.library[0].days).toEqual(["Sun"]);
+  });
+  it("a day or count the often read gives with its words column empty is backed by the dish's quote (h15 puri sabzi)", () => {
+    const c = heldRead([["Puri sabzi", "Breakfast", "Sunday puri sabzi"]], [["Puri sabzi", "Breakfast", "Sunday puri sabzi", "", "", "Sun"]]);
+    expect(c.read.library[0].days).toEqual(["Sun"]);
+  });
   it("how often said over two dishes is each one's; a dish read twice at a meal, or at several meals, keeps its days (eval h8, h13)", () => {
     const line = ["A: Ishaan has toast, or muri; luchi on Sunday.", "A: Breakfast: toast, muri, chire bhaja; luchi with alur dom on Sunday.",
       "A: Dinner: dal, rice, roti and a sabzi most nights, rajma or chole twice a week, khichdi once.", "A: Paratha on Sunday."];
