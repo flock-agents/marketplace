@@ -7,6 +7,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, maskedWithCode, phoneDigits, signedInAsOf } from "../../skills/whatsapp/server/_whatsapp";
 import { LIMITS, pause } from "../../skills/whatsapp/server/_limits";
+import { deviceNameOf } from "../../skills/whatsapp/server/_socket";
 import { OWN_JID, codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
 
 const made: World[] = [];
@@ -235,6 +236,8 @@ describe("when WhatsApp pushes back: pause, never retry", () => {
     const out: any = await w.wa.unlink();
     expect(out).toMatchObject({ unlinked: true, loggedOut: false });
     expect(out.note).toMatch(/paused/);
+    expect(out.note).toContain(`remove "${deviceNameOf()}" in Linked devices`);
+    expect(out.note).not.toContain("(Flock)");
     expect(w.sockets.length).toBe(1);
     expect(limits(w).paused).toBeNull();
   });

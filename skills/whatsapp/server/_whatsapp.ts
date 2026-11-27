@@ -14,7 +14,7 @@ import {
 import { Store, type StoredChat } from "./_store";
 import { isGroupJid } from "./_messages";
 import { LINK_CODE_STEPS, LINK_QR_STEPS, QR_MESSAGE, linkCodeMessage } from "./_guide";
-import type { AuthHandle, WASocketLike } from "./_socket";
+import { deviceNameOf, type AuthHandle, type WASocketLike } from "./_socket";
 
 /** A refusal the agent reads: a code and plain words. */
 export class Fail extends Error { constructor(public code: string, msg: string) { super(msg); } }
@@ -559,10 +559,10 @@ export class WhatsAppService {
         try {
           await this.withConnection(async (conn) => { await conn.sock.logout(); loggedOut = true; });
         } catch (e) {
-          note = `Could not tell WhatsApp (${(e as Error).message}); the link was forgotten here. The person can remove "Chrome (Flock)" in Linked devices on their phone.`;
+          note = `Could not tell WhatsApp (${(e as Error).message}); the link was forgotten here. The person can remove "${deviceNameOf()}" in Linked devices on their phone.`;
         }
       } else if (auth.registered()) {
-        note = `WhatsApp was paused, so it was not contacted; the link was forgotten here. The person can remove "Chrome (Flock)" in Linked devices on their phone.`;
+        note = `WhatsApp was paused, so it was not contacted; the link was forgotten here. The person can remove "${deviceNameOf()}" in Linked devices on their phone.`;
       }
       this.endSession();
       this.deps.clearAuth();
