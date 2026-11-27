@@ -33,12 +33,20 @@ describe("a direct chat (Butler-first, 1.10.0)", () => {
 });
 
 describe("version", () => {
-  it("is 1.10.0 in the manifest, the changelog's newest entry and the catalog", () => {
-    expect(manifest.version).toBe("1.10.0");
-    expect(read("CHANGELOG.md")).toMatch(/^# Changelog\n\n## 1\.10\.0\n/);
+  it("is 1.10.1 in the manifest, the changelog's newest entry and the catalog", () => {
+    expect(manifest.version).toBe("1.10.1");
+    expect(read("CHANGELOG.md")).toMatch(/^# Changelog\n\n## 1\.10\.1\n/);
     const entry = catalog.items.find((i: any) => i.slug === "family-butler");
-    expect(entry.latestVersion).toBe("1.10.0");
-    expect(entry.latestTag).toBe("family-butler-v1.10.0");
+    expect(entry.latestVersion).toBe("1.10.1");
+    expect(entry.latestTag).toBe("family-butler-v1.10.1");
+  });
+});
+
+describe("what I do", () => {
+  it("answers what-can-you-do from a short family-focused section", () => {
+    const soul = read("SOUL.md");
+    expect(soul).toContain("## What I do");
+    expect(soul).toContain("goes to your Personal Assistant");
   });
 });
 

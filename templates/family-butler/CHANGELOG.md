@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.1
+
+- **"What I do" in the SOUL.** Asked what it can do, Butler answers in a few short WhatsApp-sized lines about the family's planning and remembering (calendar, meals and groceries, trips, the family group) and says private things go to the Personal Assistant. Nothing else changes.
+
 ## 1.10.0
 
 - **Named Butler.** The template's name, the agent's default name, the catalog entry and its onboarding card say "Butler" (was "Family Butler"), so there is one butler, the family's, beside each person's Personal Assistant. The template's slug stays `family-butler`.
