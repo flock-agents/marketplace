@@ -5,12 +5,15 @@
 //
 // What it needs from the app:
 //   tables  slots, library, rules, slot_days (+ seed rows: date null, status confirmed), slot_dishes, house (cook_*),
-//           settings.new_dishes_per_week — column names as spec §2.1
+//           settings.new_dishes_per_week — column names as spec §2.1; one meaning model: slots.templates / slots.extras,
+//           rules.targets / rules.gives, slot_dishes.for_people,
+//           library.kind / sub / catalog_item, house.cuisines (null = not read yet)
 //   ops     apply_setup { household, transcript } → { ok, said, noted?, unplaced?, lunch_unclear?, family_cooks?, attendance? }
 //           make_plan { week_start, household } → { ok, message, unmet?, asked?, relaxed? }
 //           set_slot_day { date, slot, guests, occasion }   (Eval 2 guests)
 //           add_dish { name, slot }                          (Eval 1 contains accuracy: the contains read of one dish)
 import type { ModelCall } from "../../server/model";
+import { checkMealShape, mealKinds, type MealTemplate } from "../../server/kinds";
 import type { PlanOut, SavedDish, SavedRule, SavedSlot, SetupOut } from "./result";
 import { WEEK, dateOf, type Household, type WeekEvent } from "./truth";
 
@@ -42,33 +45,43 @@ export async function runSetup(k: Kit, h: Household, transcript: string[]): Prom
 /** What the planner saved, in spec shapes. `res`: apply_setup's answer, for what is not a table (lunch_unclear, noted). */
 export function readSetup(k: Kit, res: any = {}): SetupOut {
   const slots: SavedSlot[] = has(k, "slots") ? k.rows("slots").filter((r) => r.active === undefined || r.active === null || bool(r.active)).map((r) => ({
-    name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order,
+    name: r.name, kind: r.kind, addon_of: r.addon_of ?? null, usual_people: json(r.usual_people, []), days: json(r.days, []), skip_days: json(r.skip_days, []), order: r.order, extras: bool(r.extras),
+    ...("templates" in r ? { templates: json(r.templates, null), kinds: mealKinds(json(r.templates, [])) } : {}),
   })) : [];
   const library: SavedDish[] = has(k, "library") ? k.rows("library").filter((r) => !bool(r.suggested)).map((r) => ({
     slot: r.slot, name: r.name, frequency: r.frequency ?? null, days: json(r.days, null), contains: json(r.contains, []), contains_read: json(r.contains_read, []),
-    origin: r.origin, quote: r.quote ?? null,
+    origin: r.origin, quote: r.quote ?? null, kind: r.kind ?? null, sub: r.sub ?? null, catalog_item: r.catalog_item ?? null,
   })) : [];
   const rules: SavedRule[] = has(k, "rules") ? k.rows("rules").map((r) => ({
     hard: bool(r.hard), what: r.what, who: r.who ?? null, slots: json(r.slots, null), days: json(r.days, null), items: json(r.items, null), to: r.to ?? null,
     frequency: r.frequency ?? null, per_meal: r.per_meal ?? null, fasting_food: json(r.fasting_food, null), quote: r.quote ?? "",
+    targets: json(r.targets, null), gives: json(r.gives, null),
   })) : [];
   const days = has(k, "slot_days") ? k.rows("slot_days") : [];
   const dishes = has(k, "slot_dishes") ? k.rows("slot_dishes") : [];
   const seed = days.filter((d) => !d.date).map((d) => ({ slot: d.slot, dishes: dishesOf(dishes, d.id) }));
   const house = has(k, "house") ? k.rows("house")[0] ?? {} : {};
-  const visits = json<any>(house.cook_arrival, null);
   const state = json<any>(house.setup_state, {}) ?? {};
   return {
     ok: res?.ok !== false,
     slots, library, rules, seed,
-    cook: house.cook_name ? { name: house.cook_name, days: json(house.cook_days, []), visits: Array.isArray(visits) ? visits : visits ? [{ at: String(visits) }] : typeof house.cook_arrival === "string" ? [{ at: house.cook_arrival }] : [] } : null,
+    cook: cookOf(house),
     family_cooks: json(res?.family_cooks ?? res?.read?.family_cooks ?? state.family_cooks ?? house.family_cooks, []),
     unplaced: [...json<any[]>(res?.unplaced ?? res?.read?.unplaced, []), ...json<any[]>(res?.noted, []).map((n) => (typeof n === "string" ? { text: n } : n))],
     lunch_unclear: json(res?.lunch_unclear ?? res?.read?.lunch_unclear ?? state.lunch_unclear, []),
     ...(res?.attendance ? { attendance: res.attendance } : {}),
     said: res?.said ?? res?.say,
     settings: { new_dishes_per_week: settingOf(k, "new_dishes_per_week") ?? 2 },
+    ...("cuisines" in house ? { cuisines: json<string[] | null>(house.cuisines, null) } : {}),
   };
+}
+
+/** The cook from the house row: by her name, or (a cook the family named by her role only, spec §6.3) by her days alone. */
+export function cookOf(house: Record<string, any>): SetupOut["cook"] {
+  const days = json<string[]>(house.cook_days, []);
+  if (!house.cook_name && !days.length) return null;
+  const visits = json<any>(house.cook_arrival, null);
+  return { name: house.cook_name || null, days, visits: Array.isArray(visits) ? visits : visits ? [{ at: String(visits) }] : typeof house.cook_arrival === "string" ? [{ at: house.cook_arrival }] : [] };
 }
 
 const dishesOf = (rows: any[], id: string) => rows.filter((x) => x.slot_day_id === id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map((x) => x.dish as string);
@@ -123,17 +136,32 @@ export function loadSetup(k: Kit, s: SetupOut): string[] {
     catch (e) { refused.push(`${table}: ${String(e).slice(0, 160)}`); return null; }
   };
   const order = (sl: SetupOut["slots"][number]) => sl.kind === "addon" ? 60 : sl.name === "Breakfast" ? 10 : sl.name === "Lunch" ? 30 : sl.name === "Dinner" ? 50 : /breakfast/i.test(sl.addon_of ?? "") ? 20 : 20;
-  for (const sl of s.slots) insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1 });
+  // One meaning model: a slot's templates (its kinds are derived from them, never stored), a dish's kind, sub-kind and catalog
+  // item, when the setup has them (TRUTH with templates); left out (null) otherwise, and the planner derives them from the seed. A shape the app would refuse is reported.
+  for (const sl of s.slots) {
+    if (sl.templates) for (const e of checkMealShape(sl.templates as MealTemplate[], { slot: sl.name, slots: s.slots.map((x) => x.name) })) refused.push(`slots ${sl.name} shape: ${e}`);
+    insert("slots", { name: sl.name, kind: sl.kind, addon_of: sl.addon_of, usual_people: sl.usual_people, days: sl.days, skip_days: sl.skip_days, order: sl.order ?? order(sl), active: 1,
+      extras: sl.extras ? 1 : 0, ...(sl.templates ? { templates: sl.templates } : {}) });
+  }
   for (const d of s.library) insert("library", { key: d.name.toLowerCase(), slot: d.slot, name: d.name, frequency: d.frequency, days: d.days, contains: d.contains, contains_read: d.contains_read,
-    origin: d.origin ?? "setup_named", suggested: 0, untried: 0, offers: 0, disliked: 0 });
-  for (const r of s.rules) insert("rules", { hard: r.hard ? 1 : 0, what: r.what, who: r.who, slots: r.slots, days: r.days, items: r.items, to: r.to, frequency: r.frequency, per_meal: r.per_meal, fasting_food: r.fasting_food, quote: r.quote });
+    origin: d.origin ?? "setup_named", suggested: 0, untried: 0, offers: 0, disliked: 0,
+    ...(d.kind ? { kind: d.kind, sub: d.sub ?? null, catalog_item: d.catalog_item ?? null } : {}) });
+  for (const r of s.rules) insert("rules", { hard: r.hard ? 1 : 0, what: r.what, who: r.who, slots: r.slots, days: r.days, items: r.items, to: r.to, frequency: r.frequency, per_meal: r.per_meal, fasting_food: r.fasting_food, quote: r.quote,
+    ...(r.targets ? { targets: r.targets } : {}), ...(r.gives ? { gives: r.gives } : {}) });
   for (const row of s.seed) {
     const id = insert("slot_days", { date: null, slot: row.slot, people: [], guests: [], status: "confirmed", edited: 0 });
     if (id) row.dishes.forEach((dish, position) => insert("slot_dishes", { slot_day_id: id, position, dish, new: 0, feedback_asked: 0 }));
   }
+  // The house row is made the first time the app asks for it (family.ts getHouse): make it here, or the updates below match
+  // no row and the cook and cuisines are silently not loaded.
+  if (s.cook || s.cuisines?.length) { try { if (!db.query(`SELECT 1 FROM "house" LIMIT 1`).get()) insert("house", {}); } catch (e) { refused.push(`house: ${String(e).slice(0, 120)}`); } }
   if (s.cook) {
     try { db.query(`UPDATE "house" SET cook_name = ?, cook_days = ?, cook_arrival = ?`).run(s.cook.name, JSON.stringify(s.cook.days), JSON.stringify(s.cook.visits)); }
     catch (e) { refused.push(`house cook: ${String(e).slice(0, 120)}`); }
+  }
+  if (s.cuisines?.length) {
+    try { db.query(`UPDATE "house" SET cuisines = ?`).run(JSON.stringify(s.cuisines)); }
+    catch (e) { refused.push(`house cuisines: ${String(e).slice(0, 120)}`); }
   }
   return refused;
 }
@@ -164,8 +192,14 @@ export function readPlan(k: Kit, weekStart: string, res: any = {}): PlanOut {
     slotDays: days.map((d) => ({
       date: d.date, slot: d.slot, people: json(d.people, []), guests: json(d.guests, []), skip: d.skip ?? null, occasion: d.occasion ?? null, note: d.note ?? null,
       dishes: dishes.filter((x) => x.slot_day_id === d.id).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null, not_for: json<string[]>(x.not_for, []) })),
+        .map((x) => ({ name: x.dish, new: bool(x.new), note: x.note ?? null, not_for: json<string[]>(x.not_for, []), for_people: json<string[]>(x.for_people, []) })),
     })),
     library, unmet: json(res?.unmet, []), message: res?.message ?? res?.say, asked: json(res?.asked, []), ...(res?.relaxed ? { relaxed: res.relaxed } : {}),
   };
+}
+
+/** What the app's own shape check (server/kinds.ts checkMealShape) says of each slot's kinds and templates in a setup: TRUTH
+ *  must be a shape the app accepts, or Eval 2 plans from something the app would refuse. */
+export function shapeErrors(s: SetupOut): string[] {
+  return s.slots.flatMap((sl) => (sl.templates ? checkMealShape(sl.templates as MealTemplate[], { slot: sl.name, slots: s.slots.map((x) => x.name) }).map((e) => `${sl.name}: ${e}`) : []));
 }

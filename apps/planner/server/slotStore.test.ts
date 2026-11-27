@@ -163,6 +163,40 @@ describe("the store", () => {
     expect(listRules(kit.db).map((r) => r.what)).toEqual(["swap"]);
   });
 
+  it("a slot stores templates of every part shape and an extras flag; no kinds", async () => {
+    const { kit } = await boot();
+    const templates = [{ parts: [{ items: ["4 boiled eggs"] }, { kind: "Salad", words: "salad" }], days: ["Mon", "Tue", "Wed", "Thu", "Fri"] as const }].map((t) => ({ ...t, days: [...t.days] }));
+    commit(kit.db, kit.emitChange, (tx, ch) => { upsertSlot(tx, { name: "Lunch", kind: "main", order: 30 }, "app", ch);
+      upsertSlot(tx, { name: "Shiva's lunch box", kind: "addon", addon_of: "Lunch", order: 60, extras: true, templates }, "app", ch); });
+    const slot = getSlot(kit.db, "Shiva's lunch box")!;
+    expect(slot.templates).toEqual(templates);
+    expect(slot.extras).toBe(true);
+    expect(getSlot(kit.db, "Lunch")!.extras).toBe(false);
+    expect("kinds" in slot).toBe(false);
+    commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Agastya's lunch box", kind: "custom", order: 31, templates: [{ parts: [{ kind: "Paratha" }, { from: "Lunch", kind: "Sabzi" }] }] }, "app", ch));
+    expect(getSlot(kit.db, "Agastya's lunch box")!.templates![0].parts[1]).toEqual({ from: "Lunch", kind: "Sabzi" });
+    expect(() => commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Agastya's lunch box", templates: [{ parts: [{ from: "Agastya's lunch box" }] }] }, "app", ch)))
+      .toThrow("links to itself");
+    expect(() => commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Brunch", kind: "custom", order: 15, templates: [{ parts: [{ from: "Snack" }] }] }, "app", ch)))
+      .toThrow("Snack is not a meal");
+  });
+
+  it("a rule keeps its typed targets and what it gives; a slot dish who it is for", async () => {
+    const { kit } = await boot();
+    const rule = commit(kit.db, kit.emitChange, (tx, ch) => addRule(tx, { hard: false, what: "swap", who: "Agastya", quote: "pancakes when we make upma",
+      targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Pancakes", kind: null } }, "app", ch));
+    expect(listRules(kit.db)[0]).toMatchObject({ targets: [{ type: "kind", kind: "Upma" }], gives: { type: "item", item: "Pancakes", kind: null } });
+    const plain = commit(kit.db, kit.emitChange, (tx, ch) => addRule(tx, { hard: true, what: "avoid", who: "Dad", quote: "no egg" }, "app", ch));
+    expect(plain).toMatchObject({ targets: null, gives: null });
+    commit(kit.db, kit.emitChange, (tx, ch) => updateRule(tx, plain.id, { targets: [{ type: "ingredient", tag: "egg" }] }, "app", ch));
+    expect(listRules(kit.db).find((r) => r.id === plain.id)!.targets).toEqual([{ type: "ingredient", tag: "egg" }]);
+    expect(listRules(kit.db).find((r) => r.id === rule.id)!.gives).toEqual({ type: "item", item: "Pancakes", kind: null });
+    commit(kit.db, kit.emitChange, (tx, ch) => upsertSlot(tx, { name: "Breakfast", kind: "main", order: 10 }, "app", ch));
+    const day = commit(kit.db, kit.emitChange, (tx, ch) => saveSlotDay(tx, { date: "2026-11-30", slot: "Breakfast",
+      dishes: [{ dish: "Rava upma" }, { dish: "Pancakes", for_people: ["Agastya"] }] }, "app", ch));
+    expect(day.dishes.map((d) => d.for_people)).toEqual([[], ["Agastya"]]);
+  });
+
   it("new dishes a week: the setting, 2 until set", async () => {
     const { kit, owner } = await boot();
     expect(newDishesPerWeek(kit.db)).toBe(2);

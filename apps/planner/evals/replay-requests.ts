@@ -11,7 +11,7 @@ const model = async (req: ModelRequest): Promise<ModelResult> => {
   n++;
   const user = (() => { try { return JSON.parse(req.user); } catch { return req.user; } })();
   writeFileSync(join(out, `${String(n).padStart(2, "0")}-${(req.purpose ?? "call").replace(/[^a-z0-9]+/gi, "-")}.json`), JSON.stringify({ tier: req.tier, purpose: req.purpose, system: req.system, user, schema: req.schema }, null, 2));
-  if (req.purpose?.includes("contain")) return { ok: true, model: "stub", json: { dishes: (user.dishes ?? []).map((d: string) => ({ dish: d, has: [], not: user.tags ?? [] })) } };
+  if (req.purpose?.includes("contain")) return { ok: true, model: "stub", json: Object.fromEntries((user.dishes ?? []).map((d: string) => [d, Object.fromEntries((user.tags ?? []).map((t: string) => [t, false]))])) };
   if (req.purpose?.startsWith("meal plan: the week's") || req.purpose?.startsWith("meal plan: fix")) {
     const lib = (user.library ?? []).map((d: any) => d.dish);
     const days = Object.fromEntries((user.days ?? []).filter((d: any) => !d.skip).map((d: any, i: number) => [d.date, [...(user.staples ?? []), lib[i % Math.max(1, lib.length)]].filter(Boolean)]));

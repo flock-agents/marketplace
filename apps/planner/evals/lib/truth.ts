@@ -23,7 +23,10 @@ export type RuleWhat = "veg" | "egg" | "no_eggs" | "avoid" | "only" | "swap" | "
 export const MAIN_SLOTS = ["Breakfast", "Lunch", "Dinner"] as const;
 
 export type TruthPerson = { name: string; group: Group; age?: number };
-export type TruthCook = { name: string; days: Weekday[]; visits: { at: string; meals: string[] }[] };
+/** `at` is optional: a visit the household states by its meals only (h18's cook comes with no time said). */
+export type TruthCook = { name: string; days: Weekday[]; visits: { at?: string; meals: string[] }[] };
+/** A TRUTH cook "named" only by her role ("Cook", h18): no name was said (spec §6.3: never a role as a name). */
+export const namelessCook = (name: string | null | undefined): boolean => !name || /^(the |our |your )?cook$/i.test(name.trim());
 
 /** A slot (spec `slots`). `usual_people` omitted = everyone at home; `days` omitted = every day. `match`: how a saved
  *  custom/add-on slot's name is recognised (a main slot by its exact name). `optional`: Eval 1 neither requires nor
@@ -32,6 +35,12 @@ export type TruthSlot = {
   name: string; kind: SlotKind; addon_of?: string;
   usual_people?: string[]; days?: Weekday[]; skip_days?: { day: Weekday; skip: Skip }[];
   match?: RegExp; optional?: boolean;
+  /** An add-on beside the main plate ("Shiva's lunch box": 4 eggs and a salad): its people stay counted and fed at the
+   *  main meal (spec §5.4). */
+  extras?: boolean;
+  /** A custom slot that is the person's meal INSTEAD of this main meal ("Agastya's lunch box" replaces Lunch): its people leave
+   *  that meal on the slot's days, and only there (spec §5.4). It sits at the main's order + 5. */
+  replaces?: string;
 };
 
 /** Away from a slot on some weekdays, by the weekly pattern (household.weekly): "Shiva's at the office". Someone who
@@ -47,7 +56,45 @@ export type TruthDish = {
   contains?: string[]; notContains?: string[]; alsoSlots?: string[]; unsaid?: boolean;
   /** Other names the family uses for this dish ("fish curry" for maacher jhol): Eval 1 recognises a saved row by them. */
   aka?: string[];
+  /** Its catalog kind (and sub-kind) when the catalog cannot place its name ("Bhindi" → Sabzi, Telugu "Beans curry" → Sabzi):
+   *  the eval's judgement, for the rotation checks and for loading TRUTH with kinds. A name that is no catalog kind is a kind
+   *  of the family's own. Absent: lib/catalog.ts kindOf(name). */
+  kind?: string; sub?: string;
 };
+
+/** One part of a meal template (server/kinds.ts TemplatePart, written here from the contract; spec §5.1): a kind or one sub-kind
+ *  of it filled from catalog items (`words`: the family's own words for it, "dry sabji"; `dish`: the one dish their bare word
+ *  names), a fixed list of the family's own dishes, or a link to the item another meal has for a kind that day (no kind: its
+ *  whole plate). */
+export type TruthPart =
+  | { kind: string; sub?: string; words?: string; dish?: string }
+  | { items: string[] }
+  | { from: string; kind?: string; sub?: string };
+/** One way a meal is plated. `share`: how often, when the family said so ("2/week"). `days`: only on these days. */
+export type TruthTemplate = { parts: TruthPart[]; share?: Frequency; said?: string; days?: Weekday[] };
+/** The expected shape of one slot's meals (kinds model): its templates, which of its kinds are staples (the family's usual
+ *  item every time: roti, rice, curd) and which are kinds of the family's own (no catalog kind; nothing new suggested). Only
+ *  what the household's own seed and facts state plainly; a slot or template not listed is not scored. */
+export type TruthMeal = { slot: string; templates: TruthTemplate[]; staples?: string[]; own?: string[] };
+/** A part: a kind, or a kind and one of its sub-kinds. */
+export const part = (kind: string, sub?: string): TruthPart => (sub ? { kind, sub } : { kind });
+/** A kind part with the family's words and/or the one dish their bare word names. */
+export const kindPart = (kind: string, o: { sub?: string; words?: string; dish?: string } = {}): TruthPart =>
+  ({ kind, ...(o.sub ? { sub: o.sub } : {}), ...(o.words ? { words: o.words } : {}), ...(o.dish ? { dish: o.dish } : {}) });
+/** A linked part: the item the meal `from` has for `kind` (and `sub`) that day; no kind = its whole plate. */
+export const linked = (from: string, kind?: string, sub?: string): TruthPart => ({ from, ...(kind ? { kind } : {}), ...(sub ? { sub } : {}) });
+/** A part of the family's fixed dishes. */
+export const items = (...names: string[]): TruthPart => ({ items: names });
+/** A template from its parts, kind names as plain strings ("Rice", "Sabzi/Poriyal/Thoran" = kind Sabzi, sub-kind
+ *  Poriyal/Thoran: the first "/" splits kind from sub-kind). */
+export const tpl = (parts: (string | TruthPart)[], share?: Frequency): TruthTemplate => ({
+  parts: parts.map((x) => (typeof x !== "string" ? x : x.includes("/") ? part(x.slice(0, x.indexOf("/")), x.slice(x.indexOf("/") + 1)) : part(x))),
+  ...(share ? { share } : {}),
+});
+
+/** What a rule is about, in the eval's own words (spec §5.2): a kind, one sub-kind of it, an item (with its kind when the
+ *  family's word is a kind's item), or an ingredient. */
+export type TruthTarget = { kind: string } | { kind: string; sub: string } | { item: string; kind?: string } | { ingredient: string };
 
 /** A rule (spec `rules`). `quote`: what the saved quote must contain (a fragment of the family's words). `also`: other
  *  `what`s that mean the same here (a swap read as require). Items are tags (vocab.ts) or plain words ("brinjal"). */
@@ -58,6 +105,9 @@ export type TruthRule = {
   quote: RegExp; also?: RuleWhat[];
   /** Hard or soft both accepted (a cook's limit: spec §10.6 says rules, not which kind). */
   hardAny?: boolean;
+  /** What the rule is about, when the family's words name a kind, sub-kind, item or ingredient (spec §5.2): "Dad doesn't eat
+   *  salad" = [{ kind: "Salad" }]. `gives`: what a hard swap gives instead ("Plain paratha" in place of Roti). */
+  targets?: TruthTarget[]; gives?: TruthTarget;
 };
 
 /** Something the family said that no weekday rule can hold (Ekadashi): kept in `unplaced` / "noted, not checked". */
@@ -87,6 +137,11 @@ export type Truth = {
   seed: TruthSeed[];
   /** Eval 2 only: the week's one-off changes. */
   week?: WeekEvent[];
+  /** The family's cuisine profile in the catalog's cuisine words (lib/catalog.ts CUISINES), judged from what they eat:
+   *  `cuisines` must be read; `cuisinesAlso` may be (a neighbouring region their dishes also point to). */
+  cuisines?: string[]; cuisinesAlso?: string[];
+  /** The expected meal templates per slot, in kinds terms (kinds model, 25 Nov). */
+  meals?: TruthMeal[];
   /** Notes for the judge, in words. */
   judgeNotes: string[];
 };
@@ -97,13 +152,19 @@ export type Household = {
   owner: string;
   /** The persona's first line. */
   intro: string;
+  /** Fixed question and answer lines ("Q: ..." / "A: ..."), when the household is scored on them as they are said: no persona
+   *  is simulated, the lines are the transcript. */
+  transcript?: string[];
   /** Flock's household facts after its own household questions (incl. `household.weekly`, spec §2.3). */
   household: Record<string, unknown>;
   groceryApps: string[];
-  /** What the owner knows and would say, before the correction. */
-  facts: { id: string; text: string }[];
-  /** Sent once, as its own reply, right after the answer to question `after`; the fact `fact` then reads `corrected`. */
-  correction: { after: string; line: string; fact: string; corrected: string };
+  /** What the owner knows and would say, before the correction, keyed by the interview's question ids (flock.app.json
+   *  setup[]). `differs` (on `childSame` only): a child eats something else at some meal or carries a box (Flock's
+   *  childDiffers is non-empty, so childMeals is asked). */
+  facts: { id: string; text: string; differs?: boolean }[];
+  /** Sent once, as its own reply, right after the answer to question `after`; the fact `fact` then reads `corrected`. None
+   *  for a household whose fixed `transcript` is the chat. */
+  correction?: { after: string; line: string; fact: string; corrected: string };
   truth: Truth;
 };
 
@@ -114,9 +175,12 @@ export const dish = (name: string, slots: string[], o: Omit<TruthDish, "name" | 
 /** Breakfast, Lunch and Dinner, with their recurring skip days. */
 export const mains = (skip: Partial<Record<(typeof MAIN_SLOTS)[number], { day: Weekday; skip: Skip }[]>> = {}): TruthSlot[] =>
   MAIN_SLOTS.map((name) => ({ name, kind: "main" as const, ...(skip[name] ? { skip_days: skip[name] } : {}) }));
-export const veg = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "veg", title: "Vegetarian", hard: true, what: "veg", items: ["meat", "fish"], quote, also: ["avoid"], ...o });
-export const noEggs = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "no_eggs", title: "No eggs", hard: true, what: "no_eggs", items: ["egg"], quote, also: ["avoid"], ...o });
-export const avoid = (id: string, title: string, items: string[], quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: true, what: "avoid", items, quote, ...o });
+/** An ingredient target per item (spec §9.6: veg = ingredients meat, fish; an avoid of tags = those ingredients). */
+const ingredients = (items: string[]): TruthTarget[] => items.map((ingredient) => ({ ingredient }));
+export const veg = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "veg", title: "Vegetarian", hard: true, what: "veg", items: ["meat", "fish"], targets: ingredients(["meat", "fish"]), quote, also: ["avoid"], ...o });
+export const noEggs = (quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id: "no_eggs", title: "No eggs", hard: true, what: "no_eggs", items: ["egg"], targets: ingredients(["egg"]), quote, also: ["avoid"], ...o });
+/** An avoid of tags: each an ingredient target unless `o.targets` says what the rule is about (a kind: "no salad"). */
+export const avoid = (id: string, title: string, items: string[], quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: true, what: "avoid", items, targets: ingredients(items), quote, ...o });
 export const note = (id: string, title: string, who: string | undefined, quote: RegExp, o: Partial<TruthRule> = {}): TruthRule => ({ id, title, hard: false, what: "note", ...(who ? { who } : {}), quote, ...o });
 /** The structured weekly pattern Flock reads from the weekday answer (spec §2.3 household.weekly). */
 export type Weekly = { person: string; where: string; weekdays: Weekday[]; from?: string; to?: string; lunch?: "away" | "carries" | "home" | null };
@@ -147,7 +211,9 @@ export function dishNameOf(name: string, names: readonly string[]): string | nul
   const n = dish(name);
   const exact = names.find((d) => dish(d) === n);
   if (exact) return exact;
-  const near = names.filter((d) => { const t = dish(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `)); });
+  // The same words in any order are one dish ("Paratha with egg" is "Egg paratha roll"); "with", "inside", "stuffed" and "roll" say nothing.
+  const bag = (s: string) => dish(s).split(" ").filter((w) => w && !["with", "inside", "stuffed", "roll"].includes(w)).sort().join(" ");
+  const near = names.filter((d) => { const t = dish(d); return !!t && (` ${n} `.includes(` ${t} `) || ` ${t} `.includes(` ${n} `) || (!!bag(d) && bag(d) === bag(name))); });
   return [...near].sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
@@ -172,3 +238,17 @@ export function dateOf(monday: string, day: Weekday): string {
   return d.toISOString().slice(0, 10);
 }
 export const weekdayOfDate = (date: string): Weekday => WEEK[(new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7];
+
+/** The weekday Lunch span, the scorer's own copy (this file imports nothing from server/). */
+const LUNCH_SPAN: [string, string] = ["12:00", "14:30"];
+/** Owner, 26 Nov: "Kids coming home for lunch is not a valid case for now." A school-going child (a TRUTH child with a
+ *  `household.weekly` school entry) is off the shared Lunch on their school days when school covers lunch: the entry's hours
+ *  hold the whole Lunch span, or the family says "away" outright; unless they eat at home ("home") or carry the home lunch
+ *  ("carries": cooked for them and packed, so they count, §5.4). School that ends before lunch leaves them at home. */
+export function schoolLunchAway(h: Household, person: string, day: Weekday): boolean {
+  if (!h.truth.people.some((p) => p.group === "child" && sameName(p.name, person))) return false;
+  const weekly = (h.household["household.weekly"] ?? []) as { person: string; where?: string; weekdays?: string[]; lunch?: string | null; from?: string; to?: string }[];
+  const covers = (w: { from?: string; to?: string }) => !!w.from && !!w.to && w.from <= LUNCH_SPAN[0] && LUNCH_SPAN[1] <= w.to;
+  return weekly.some((w) => sameName(w.person, person) && /school/i.test(w.where ?? "") && (w.weekdays ?? []).includes(day)
+    && w.lunch !== "home" && w.lunch !== "carries" && (w.lunch === "away" || covers(w)));
+}

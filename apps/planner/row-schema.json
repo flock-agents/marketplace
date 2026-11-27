@@ -577,6 +577,12 @@
               "null"
             ]
           },
+          "said": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "contains": {
             "type": [
               "string",

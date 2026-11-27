@@ -11,6 +11,7 @@
 //   bun evals/eval-plan.ts --compare a/results.json b/results.json   pairwise judge of two runs' weeks
 //   bun evals/eval-plan.ts --rescore <results.json>       a scorer change on a past run's saved weeks, judges kept, no model
 //   bun evals/eval-plan.ts --heldout                      the held-out households h9–h12 instead (milestones only)
+//   bun evals/eval-plan.ts --heldout2                     the second held-out set h15–h17 instead
 import { mkdirSync, writeFileSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -29,7 +30,8 @@ const WEEK0 = arg("week") ?? "2026-11-30";
 const MODEL = arg("model") ?? DEFAULT_UPSTREAM;
 const JUDGES = arg("judge-models")?.split(",").map((s) => s.trim()).filter(Boolean) ?? DEFAULT_JUDGES;
 const CONC = Number(arg("concurrency") ?? 4);
-const HELD = flag("heldout");
+const HELD2 = flag("heldout2");
+const HELD = flag("heldout") || HELD2;
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
 const log0 = console.log;
 if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "").startsWith("[planner]")) log0(...a); };
@@ -61,19 +63,19 @@ const FROM = arg("from-eval1");
 if (FROM) {
   for (const r of JSON.parse(readFileSync(FROM, "utf8")).results) {
     const h = byId(r.household);
-    if (h && r.setup && pick(arg("only"), { heldout: HELD }).includes(h)) jobs.push({ h, setup: r.setup, source: `eval1 rep ${r.rep}` });
+    if (h && r.setup && pick(arg("only"), { heldout: HELD, heldout2: HELD2 }).includes(h)) jobs.push({ h, setup: r.setup, source: `eval1 rep ${r.rep}` });
   }
 } else if (flag("perturb")) {
   const after = process.argv[process.argv.indexOf("--perturb") + 1];
   const kinds = (after && !after.startsWith("--") ? after.split(",") : Object.keys(PERTURBATIONS)) as Perturbation[];
-  for (const h of pick(arg("only") ?? (HELD ? undefined : "h3,h1,h2"), { heldout: HELD })) for (const kind of kinds) {
+  for (const h of pick(arg("only") ?? (HELD ? undefined : "h3,h1,h2"), { heldout: HELD, heldout2: HELD2 })) for (const kind of kinds) {
     const { setup, moved } = perturb(h, setupOfTruth(h), kind);
     jobs.push({ h, setup, perturb: kind, moved, source: `truth + ${kind}` });
   }
-} else for (const h of pick(arg("only"), { heldout: HELD })) jobs.push({ h, setup: setupOfTruth(h), source: "truth" });
+} else for (const h of pick(arg("only"), { heldout: HELD, heldout2: HELD2 })) jobs.push({ h, setup: setupOfTruth(h), source: "truth" });
 
 const mode: string = past ? past.mode : flag("baseline") ? "baseline" : FROM ? "from-eval1" : flag("perturb") ? "perturb" : "truth";
-const OUT = past ? join(RESCORE!, "..") : arg("out") ?? join(import.meta.dir, "results", `plan-${mode}${HELD ? "-heldout" : ""}-${stamp}`);
+const OUT = past ? join(RESCORE!, "..") : arg("out") ?? join(import.meta.dir, "results", `plan-${mode}${HELD2 ? "-heldout2" : HELD ? "-heldout" : ""}-${stamp}`);
 mkdirSync(OUT, { recursive: true });
 const judging = !past && !flag("no-judge") && mode !== "perturb" && mode !== "baseline";
 

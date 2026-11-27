@@ -19,10 +19,16 @@ export type PersonRow = typeof people.$inferSelect;
 export type HouseRow = typeof house.$inferSelect;
 /** One visit of the cook: when they come, and the meals that visit makes when the family said. */
 export type CookVisit = { at: string; meals?: string[] };
+/** A visit as saved: setup keeps one said by its meals alone, with no clock time (spec §6.3, §9.3: "morning" is no time). */
+export type SavedVisit = { at?: string; meals?: string[] };
 /** The house row with its lists read: what the routes answer with. Every day is planned; a meal not cooked at home is a slot's
  *  skip_days (slotStore.ts). */
-export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced"> &
-  { cook_days: Weekday[]; cook_visits: CookVisit[]; connected_apps: GroceryApp[]; history_synced: HistorySynced };
+export type HouseView = Omit<HouseRow, "cook_days" | "connected_apps" | "history_synced" | "cuisines"> &
+  { cook_days: Weekday[]; cook_visits: CookVisit[];
+    /** The meals of each visit said with no time (setup: "she comes in the morning for breakfast and lunch"), in order. */
+    cook_meal_visits: string[][]; connected_apps: GroceryApp[]; history_synced: HistorySynced;
+    /** The family's cuisine profile (kinds.json cuisines); null = not read yet. */
+    cuisines: string[] | null };
 /** How far each app's order history was read, by reader: whoever gave the orders (`agent:<id>`, a person's own agent reading
  *  that person's account). `*` is a date kept before readers were told apart. */
 export type HistorySynced = Record<string, Record<string, string>>;
@@ -57,18 +63,24 @@ export function readUntil(synced: HistorySynced, app: string, reader: string, le
 
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** The cook's visits from `cook_arrival`: one plain "HH:MM" (every row before a cook could come twice) is one visit; a cook who
- *  comes more than once, or whose visit names its meals, is kept as a JSON list. Earliest first. */
-export function cookVisits(arrival: string | null): CookVisit[] {
+ *  comes more than once, or whose visit names its meals, is kept as a JSON list. Earliest first. A visit with its meals and
+ *  no time (setup, D10) is kept too. */
+export function cookVisits(arrival: string | null): SavedVisit[] {
   if (!arrival) return [];
   if (CLOCK.test(arrival)) return [{ at: arrival }];
-  return list<CookVisit>(arrival).filter((v) => isObject(v) && typeof v.at === "string" && CLOCK.test(v.at));
+  return list<SavedVisit>(arrival).filter((v) => isObject(v) && (typeof v.at === "string" ? CLOCK.test(v.at)
+    : v.at === undefined && Array.isArray(v.meals) && v.meals.length > 0));
 }
 
 export function houseView(row: HouseRow): HouseView {
-  const visits = cookVisits(row.cook_arrival);
-  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every visit.
-  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_days: list(row.cook_days),
-    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced) };
+  // The page's visits are the timed ones (a visit with no time is setup's and the plan's: savedOf, houseCook).
+  const all = cookVisits(row.cook_arrival), visits = all.filter((v): v is CookVisit => !!v.at);
+  // cook_arrival stays one time for whoever reads it as before (the first visit); cook_visits is every timed visit, and
+  // cook_meal_visits the meals of each visit with no time.
+  return { ...row, cook_arrival: visits[0]?.at ?? null, cook_visits: visits, cook_meal_visits: all.filter((v) => !v.at).map((v) => v.meals ?? []),
+    cook_days: list(row.cook_days),
+    connected_apps: list<GroceryApp>(row.connected_apps), history_synced: historySynced(row.history_synced),
+    cuisines: row.cuisines == null ? null : list<string>(row.cuisines) };
 }
 
 /** The names of the meals a cook's visit may make: the active slots, else the main ones before any slot is saved. */
@@ -249,9 +261,19 @@ export function mountFamilyRoutes(hono: Hono<any>, db: Db, emit: Emit, opts: { a
     // every 7:30 correction was sent as visits and lost).
     if (b.arrival === undefined && b.visits !== undefined) b = { ...b, arrival: b.visits };
     const had = getHouse(db);
-    const set: Partial<typeof house.$inferInsert> = { cook_name: name(b.name, "the cook's name") };
+    // A cook saved without a name (setup: the family never named her, D10) is edited as she is: a blank or null name keeps her
+    // nameless, no name leaves the name as it was. A new cook still needs a name.
+    const hadCook = !!(had.cook_name || had.cook_days);
+    const set: Partial<typeof house.$inferInsert> = {};
+    if (!hadCook || (typeof b.name === "string" && b.name.trim())) set.cook_name = name(b.name, "the cook's name");
+    else if (b.name !== undefined) set.cook_name = b.name === null || typeof b.name === "string" ? null : name(b.name, "the cook's name");
     if (b.days !== undefined || !had.cook_days) set.cook_days = JSON.stringify(weekdays(b.days, "days"));
-    if (b.arrival !== undefined || !had.cook_arrival)
+    // An empty arrival for a saved cook clears her times; the visits said by their meals alone (setup's) stay.
+    const empty = b.arrival === null || b.arrival === "" || (Array.isArray(b.arrival) && !b.arrival.length);
+    if (hadCook && empty) {
+      const untimed = cookVisits(had.cook_arrival).filter((v) => !v.at);
+      set.cook_arrival = untimed.length ? JSON.stringify(untimed) : null;
+    } else if (b.arrival !== undefined || (!had.cook_arrival && !hadCook))
       set.cook_arrival = arrival(b.arrival, slotNames(db));
     for (const [field, column] of [["makes_well", "cook_makes_well"], ["wont_make", "cook_wont_make"], ["time_limit", "cook_time_limit"], ["note", "cook_note"]] as const)
       if (b[field] !== undefined) set[column] = words(b[field], field);

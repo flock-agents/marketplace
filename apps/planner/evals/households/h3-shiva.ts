@@ -2,7 +2,13 @@
 // Agastya (6), Gowri Shankar (63, diabetic, fasts Thursday till evening); cook Lakshmi Mon–Sat; Sunday lunch out, Saturday
 // dinner ordered in; vegetarian, no eggs, no mushrooms, nut-free tiffin. Meal shape in the owner's own words (23 Nov).
 // Frequency words: weekend parathas, curd rice when he's tired, millets are good for him (soft), no sugar (hard).
-import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, type Household } from "../lib/truth";
+import { avoid, dish, mains, MON_SAT, noEggs, note, SCHOOL, veg, items, kindPart, tpl, type Household } from "../lib/truth";
+
+// Their bare words that name one dish (scripts/kinds/bare-decided.md).
+const DOSA = kindPart("Dosa", { dish: "Plain dosa", words: "dosa" });
+// Their words for a category part.
+const SABJI = kindPart("Sabzi", { words: "sabji" });
+const DRY_SABJI = kindPart("Sabzi", { words: "dry sabji" });
 
 const GS = "Gowri Shankar";
 export const h3: Household = {
@@ -15,30 +21,26 @@ export const h3: Household = {
     "household.help": [{ role: "cook", name: "Lakshmi", days: "Mon-Sat", times: "7am", meals: ["Breakfast", "Lunch"] },
       { role: "cook", name: "Lakshmi", days: "Mon-Sat", times: "6pm", meals: ["Dinner"] }, { role: "maid", days: "daily", times: "9am" }],
     "household.weekday": "Shiva and Ankita work from office 9:30 to 6; father is home all day. Agastya has school 8:30 to 2:30.",
-    "household.mealsBy": "Ankita", "household.groceriesBy": "Ankita",
+    "household.mealsBy": [{ person: "Ankita" }], "household.groceriesBy": [{ person: "Ankita" }],
     "household.weekly": [{ person: "Shiva", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
       { person: "Ankita", where: "office", weekdays: SCHOOL, from: "09:30", to: "18:00", lunch: "carries" },
-      { person: "Agastya", where: "school", weekdays: SCHOOL, from: "08:30", to: "14:30", lunch: "home" },
+      { person: "Agastya", where: "school", weekdays: SCHOOL, from: "08:30", to: "14:30", lunch: "away" },
       { person: GS, where: "home", weekdays: SCHOOL, lunch: "home" }],
   },
   groceryApps: ["Zepto", "Instamart"],
   facts: [
     { id: "pain", text: "Hardest part: deciding what to make every day and remembering to order what the meals need." },
     { id: "apps", text: "Groceries on Zepto (main); Instamart when something is not on Zepto." },
-    { id: "people", text: "Lives with wife Ankita, son Agastya (6) and father Gowri Shankar (63)." },
+    { id: "lunchWhere", text: "Shiva and Ankita take lunch boxes. Agastya takes a school tiffin Monday to Friday." },
     { id: "cook", text: "Cook Lakshmi comes Monday to Saturday, 7 in the morning for breakfast and lunch, and 6 in the evening for dinner." },
     { id: "cookTime", text: "Lakshmi has about an hour in the morning: breakfast plus at most two dishes for lunch." },
-    { id: "cookingDays", text: "Sunday: Ankita makes a quick breakfast and dinner; Sunday lunch is eaten out." },
-    { id: "kidsBreakfast", text: "Agastya's breakfasts last week: idli with chutney twice, dosa, poha, upma, aloo paratha on Saturday; milk every morning." },
-    { id: "kidsLunch", text: "Agastya takes a school tiffin Monday to Friday; last week: paratha rolls, besan cheela, mini idlis, vegetable sandwich, lemon rice on Friday; after school the home lunch, dal rice and a sabzi." },
-    { id: "kidsDinner", text: "Agastya's dinner: same as the adults mostly, chapati with dal or a sabzi, less spicy; curd rice when he's tired." },
-    { id: "adultsBreakfast", text: "Adults' breakfast, a mixed breakfast - idli, dosa, poha, upma, sandwich. Father had ragi dosa and oats. Weekend parathas." },
-    { id: "adultsLunch", text: "Lunch - south indian - rice, sambar, sabji, etc. Shiva and Ankita take lunch boxes. Rajma chawal twice a week. Bisi bele bath on Saturday. Father has the same with less rice." },
-    { id: "adultsDinner", text: "Dinner - roti, gravy or dry sabji. Chapati most nights. Palak dal, bhindi, aloo gobi, chole once a week. Father has two phulkas, no rice at night." },
-    { id: "diet", text: "Father Gowri Shankar is diabetic: less rice, no sugar, millets are good for him. Nobody else on a diet." },
-    { id: "elders", text: "Father: less salt too. Onion and garlic are fine." },
-    { id: "rules", text: "Vegetarian, no eggs at home. No mushrooms. Agastya's tiffin nut-free (school is nut-free). Father fasts Thursday till evening, then a light dinner." },
-    { id: "orderIn", text: "Order in once a week, usually Saturday dinner from Swiggy." },
+    { id: "otherDays", text: "Sunday: Ankita makes a quick breakfast and dinner; Sunday lunch is eaten out. Order in once a week, usually Saturday dinner from Swiggy." },
+    { id: "childSame", text: "Agastya takes a school tiffin Monday to Friday; last week: paratha rolls, besan cheela, mini idlis, vegetable sandwich, lemon rice on Friday; after school the home lunch, dal rice and a sabzi.", differs: true },
+    { id: "familyBreakfast", text: "Adults' breakfast, a mixed breakfast - idli, dosa, poha, upma, sandwich. Father had ragi dosa and oats. Weekend parathas." },
+    { id: "familyLunch", text: "Lunch - south indian - rice, sambar, sabji, etc. Shiva and Ankita take lunch boxes. Rajma chawal twice a week. Bisi bele bath on Saturday. Father has the same with less rice." },
+    { id: "familyDinner", text: "Dinner - roti, gravy or dry sabji. Chapati most nights. Palak dal, bhindi, aloo gobi, chole once a week. Father has two phulkas, no rice at night." },
+    { id: "childMeals", text: "Agastya's breakfasts last week: idli with chutney twice, dosa, poha, upma, aloo paratha on Saturday; milk every morning. Agastya's dinner: same as the adults mostly, chapati with dal or a sabzi, less spicy; curd rice when he's tired." },
+    { id: "differently", text: "Father Gowri Shankar is diabetic: less rice, no sugar, millets are good for him. Nobody else on a diet. Father: less salt too. Onion and garlic are fine. Vegetarian, no eggs at home. No mushrooms. Agastya's tiffin nut-free (school is nut-free). Father fasts Thursday till evening, then a light dinner." },
     { id: "subscriptions", text: "Country Delight milk, 1 litre every morning. Nothing else." },
   ],
   correction: { after: "cookTime", line: "actually Lakshmi comes at 7:30", fact: "cook",
@@ -49,22 +51,21 @@ export const h3: Household = {
     familyCooks: [{ person: "Ankita", days: ["Sun"] }],
     slots: [
       ...mains({ Lunch: [{ day: "Sun", skip: "eaten_out" }], Dinner: [{ day: "Sat", skip: "ordered_in" }] }),
-      { name: "Agastya's tiffin", kind: "custom", usual_people: ["Agastya"], days: SCHOOL, match: /tiffin|lunch ?box|school/i },
+      { name: "Agastya's tiffin", kind: "custom", usual_people: ["Agastya"], days: SCHOOL, replaces: "Lunch", match: /tiffin|lunch ?box|school/i },
       // "Father has two phulkas, no rice at night": his dinner is always different, so it gets an add-on with the phulkas.
       { name: "Gowri Shankar's dinner", kind: "addon", addon_of: "Dinner", usual_people: [GS], match: /gowri|father|appa|grand|phulka/i },
       { name: "Gowri Shankar's breakfast", kind: "addon", addon_of: "Breakfast", usual_people: [GS], match: /gowri|father|appa|grand/i, optional: true },
     ],
-    away: [],
+    away: [{ person: "Agastya", slots: ["Lunch"], days: SCHOOL }],
     library: [
-      ...dish("Idli", ["Breakfast"]), ...dish("Dosa", ["Breakfast"]), ...dish("Poha", ["Breakfast"]), ...dish("Upma", ["Breakfast"]),
-      ...dish("Sandwich", ["Breakfast"]), ...dish("Chutney", ["Breakfast"]), ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
+      ...dish("Idli", ["Breakfast"]), ...dish("Plain dosa", ["Breakfast"]),
+      ...dish("Aloo paratha", ["Breakfast"], { days: ["Sat", "Sun"] }),
       ...dish("Ragi dosa", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }), ...dish("Oats", ["Breakfast"], { alsoSlots: ["Gowri Shankar's breakfast"] }),
-      ...dish("Paratha roll", ["Agastya's tiffin"]), ...dish("Besan cheela", ["Agastya's tiffin"]), ...dish("Mini idli", ["Agastya's tiffin"]),
+      ...dish("Paratha roll", ["Agastya's tiffin"], { kind: "Roll" }), ...dish("Besan cheela", ["Agastya's tiffin"]), ...dish("Mini idli", ["Agastya's tiffin"]),
       ...dish("Vegetable sandwich", ["Agastya's tiffin"]), ...dish("Lemon rice", ["Agastya's tiffin"], { days: ["Fri"], notContains: ["nuts", "peanut"] }),
-      ...dish("Rice", ["Lunch"]), ...dish("Sambar", ["Lunch"]), ...dish("Dal", ["Lunch", "Dinner"]),
       ...dish("Rajma chawal", ["Lunch"], { frequency: "2/week" }), ...dish("Bisi bele bath", ["Lunch"], { days: ["Sat"] }), ...dish("Curd", ["Lunch"], { unsaid: true }),
-      ...dish("Bhindi", ["Lunch"], { unsaid: true }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
-      ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"]),
+      ...dish("Bhindi", ["Lunch"], { unsaid: true, kind: "Sabzi" }), ...dish("Aloo gobi", ["Lunch"], { unsaid: true }),
+      ...dish("Chapati", ["Dinner"], { frequency: "usually" }), ...dish("Palak dal", ["Dinner"]), ...dish("Bhindi", ["Dinner"], { kind: "Sabzi" }),
       ...dish("Aloo gobi", ["Dinner"]), ...dish("Chole", ["Dinner"], { frequency: "1/week" }), ...dish("Curd rice", ["Dinner"], { frequency: "sometimes" }),
       ...dish("Phulka", ["Gowri Shankar's dinner"]),
     ],
@@ -82,7 +83,7 @@ export const h3: Household = {
       { id: "cook_limit", title: "Lakshmi: breakfast plus at most two dishes for lunch", hard: false, hardAny: true, what: "cap", per_meal: 2, slots: ["Lunch"], days: MON_SAT, quote: /two dishes|an hour/i },
     ],
     seed: [
-      { slot: "Breakfast", dishes: ["Idli", "Chutney"] }, { slot: "Breakfast", dishes: ["Dosa", "Chutney"] }, { slot: "Breakfast", dishes: ["Poha"] },
+      { slot: "Breakfast", dishes: ["Idli", "Chutney"] }, { slot: "Breakfast", dishes: ["Plain dosa", "Chutney"] }, { slot: "Breakfast", dishes: ["Poha"] },
       { slot: "Breakfast", dishes: ["Upma", "Chutney"] }, { slot: "Breakfast", dishes: ["Idli", "Chutney"] }, { slot: "Breakfast", dishes: ["Aloo paratha"] },
       { slot: "Agastya's tiffin", dishes: ["Paratha roll"] }, { slot: "Agastya's tiffin", dishes: ["Besan cheela"] }, { slot: "Agastya's tiffin", dishes: ["Mini idli"] },
       { slot: "Agastya's tiffin", dishes: ["Vegetable sandwich"] }, { slot: "Agastya's tiffin", dishes: ["Lemon rice"] },
@@ -90,6 +91,15 @@ export const h3: Household = {
       { slot: "Lunch", dishes: ["Bisi bele bath", "Curd"] }, { slot: "Lunch", dishes: ["Rice", "Sambar", "Aloo gobi", "Curd"] },
       { slot: "Dinner", dishes: ["Chapati", "Palak dal", "Bhindi"] }, { slot: "Dinner", dishes: ["Chapati", "Chole"] }, { slot: "Dinner", dishes: ["Chapati", "Dal", "Aloo gobi"] },
       { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] }, { slot: "Gowri Shankar's dinner", dishes: ["Phulka"] },
+    ],
+    cuisines: ["south", "north"], cuisinesAlso: ["tamil", "karnataka", "punjab", "west", "central", "continental"],
+    meals: [
+      { slot: "Breakfast", templates: [tpl(["Idli", "Chutney"]), tpl([DOSA, "Chutney"]), tpl(["Poha"]), tpl(["Upma", "Chutney"]), tpl(["Paratha"]), tpl(["Sandwich"])] },
+      { slot: "Agastya's tiffin", templates: [tpl(["Roll"]), tpl(["Chilla"]), tpl(["Idli"]), tpl(["Sandwich"]), tpl(["Flavoured rice"])] },
+      { slot: "Lunch", staples: ["Rice", "Curd"], templates: [tpl(["Rice", "Rice curry/Sambar", SABJI, "Curd"]), tpl(["Rice", "Dal", SABJI, "Curd"]),
+        tpl([items("Rajma chawal"), "Curd"], "2/week"), tpl(["Flavoured rice", "Curd"])] },
+      { slot: "Dinner", staples: ["Roti"], templates: [tpl(["Roti", "Dal", DRY_SABJI]), tpl(["Roti", kindPart("Gravy", { words: "gravy" })]), tpl(["Roti", "Dal/Rajma/Chole"])] },
+      { slot: "Gowri Shankar's dinner", staples: ["Roti"], templates: [tpl(["Roti"])] },
     ],
     judgeNotes: ["Gowri Shankar fasts Thursday till evening: he is not at Thursday breakfast and lunch.", "Gowri Shankar: no sugar, less rice and no rice at night (his own phulkas at dinner); millets good for him two or three times a week.",
       "Agastya's tiffin Monday to Friday, nut-free.", "Sunday lunch eaten out, Saturday dinner ordered in; Ankita cooks quick Sunday breakfast and dinner.", "Cook has an hour in the morning: breakfast plus at most two lunch dishes."],

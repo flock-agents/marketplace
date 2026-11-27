@@ -8,7 +8,8 @@ import { boot } from "./testkit";
 import { DISHES_ASK } from "./setup";
 import type { ModelRequest, ModelResult } from "./model";
 
-// Her household as Flock holds it (household.* facts, sent in full) and her replies word for word.
+// Her household as Flock holds it (household.* facts, sent in full) and her replies word for word. The Q lines are the approved
+// question texts (docs/2026-11-26-meal-questions-approved.md, placeholders filled): setup reads by content, never by id.
 const HOUSEHOLD = {
   "household.people": [{ name: "Shiva", group: "adult", relation: "self" }, { name: "Ankita", group: "adult", relation: "wife" },
     { name: "Agastya", group: "child", relation: "kid", age: "6" }, { name: "Gowri Shankar", group: "elder", relation: "dad" }],
@@ -19,24 +20,24 @@ const HOUSEHOLD = {
   "household.speaker": "Ankita",
 };
 const ANSWERS = {
-  kidsBreakfast: "breakfast is same as what we have - idli, dosa, poha, upma. Sometimes for his breakfast I make pancakes or sandwiches",
-  kidsLunch: "he takes paratha & the dry sabji that we make in the house made into a roll, one fruit, 5 almonds",
-  kidsDinner: "Same as what we eat - roti & some north indian sabji",
-  adultsBreakfast: "same as what I described - idli, poha, dosa, rava idli, upma, etc. Pancakes is just for agastya",
-  adultsLunch: "south indian based items. Rice + dry sabji + sambar/rasam/kerala style coconut sambar/vatha kozhambu. Somtimes we make biryani or pulao instead of full south indian.",
-  rules: "mostly vegetarian with eggs. Egg curry on weekends. Those days we make some dal or thogayal for appa.",
-  orderIn: "Sunday cook doesnt come. So dinner is ordered in. Sometimes, even lunch is ordered in",
+  cookTime: "yes, 1 hour she has",
+  otherDays: "Sunday cook doesnt come. So dinner is ordered in. Sometimes, even lunch is ordered in",
+  childSame: "breakfast is same as what we have - idli, dosa, poha, upma. Sometimes for his breakfast I make pancakes or sandwiches",
+  familyBreakfast: "same as what I described - idli, poha, dosa, rava idli, upma, etc. Pancakes is just for agastya",
+  familyLunch: "south indian based items. Rice + dry sabji + sambar/rasam/kerala style coconut sambar/vatha kozhambu. Somtimes we make biryani or pulao instead of full south indian.",
+  familyDinner: "Same as what we eat - roti & some north indian sabji",
+  childMeals: "he takes paratha & the dry sabji that we make in the house made into a roll, one fruit, 5 almonds",
+  differently: "mostly vegetarian with eggs. Egg curry on weekends. Those days we make some dal or thogayal for appa.",
 };
 const TRANSCRIPT = [
-  "Q: The family told me the cook comes twice a day, Monday to Sat. Is that right, and does the cook come for any other meals?",
-  "A: yes, 1 hour she has",
-  "Q: What did Agastya have for breakfast last week?", `A: ${ANSWERS.kidsBreakfast}`,
-  "Q: And in his school tiffin?", `A: ${ANSWERS.kidsLunch}`,
-  "Q: His dinner?", `A: ${ANSWERS.kidsDinner}`,
-  "Q: What did the grown-ups have for breakfast last week?", `A: ${ANSWERS.adultsBreakfast}`,
-  "Q: And lunch?", `A: ${ANSWERS.adultsLunch}`,
-  "Q: Any food rules?", `A: ${ANSWERS.rules}`,
-  "Q: Any meals you eat out or order in every week?", `A: ${ANSWERS.orderIn}`,
+  "Q: Is your cook short of time, so only a few dishes?", `A: ${ANSWERS.cookTime}`,
+  "Q: On Sunday, when your cook doesn't come, who cooks, and is any meal eaten out or ordered in?", `A: ${ANSWERS.otherDays}`,
+  "Q: For Agastya: the family's food, or something else at some meals? And a box for school?", `A: ${ANSWERS.childSame}`,
+  "Q: What did the family have for breakfast over the past week? Tell me the dishes.", `A: ${ANSWERS.familyBreakfast}`,
+  "Q: What did the family have for lunch over the past week? Tell me the dishes.", `A: ${ANSWERS.familyLunch}`,
+  "Q: What did the family have for dinner over the past week? Tell me the dishes.", `A: ${ANSWERS.familyDinner}`,
+  "Q: What's on the plate for Agastya at those meals, and what goes in the box?", `A: ${ANSWERS.childMeals}`,
+  "Q: Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?", `A: ${ANSWERS.differently}`,
 ];
 
 // What a model answers for her (the shape the prompts ask for: rows [name, slot, quote]; quotes copied from her lines).
@@ -57,14 +58,16 @@ const DISHES = {
     ["Breakfast", "Idli", "idli, dosa, poha, upma"], ["Agastya's tiffin", "Paratha roll", "made into a roll"]],
 };
 
-type Part = "home" | "rules" | "dishes" | "often" | "contains" | "lint" | "plan";
+type Part = "home" | "rules" | "dishes" | "often" | "contains" | "lint" | "kinds" | "plan";
 const partOf = (r: ModelRequest): Part => {
   const p = r.purpose ?? "";
-  return /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /often/.test(p) ? "often" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes"
+  return /kinds/.test(p) ? "kinds" : /contains/.test(p) ? "contains" : /lint/.test(p) ? "lint" : /often/.test(p) ? "often" : /rules/.test(p) ? "rules" : /dishes/.test(p) ? "dishes"
     : /setup/.test(p) ? "home" : "plan";
 };
 function fake(over: Partial<Record<Part, unknown>> = {}) {
+  // The kinds read places every dish code could not as a kind of its own: a word no answer placed is asked, never saved (H4).
   const answers: Record<Part, unknown> = { home: HOME, rules: RULES, dishes: DISHES, often: { often: [] }, lint: { dishes: [] }, plan: { days: {} },
+    kinds: (r: ModelRequest) => ({ dishes: JSON.parse(r.user).dishes.map((d: { name: string; meal: string }) => ({ name: d.name, meal: d.meal, own: true, named: "dish" })) }),
     contains: (r: ModelRequest) => { const { dishes, tags } = JSON.parse(r.user); return Object.fromEntries(dishes.map((d: string) => [d, Object.fromEntries(tags.map((t: string) => [t, d === "Egg curry" && t === "egg"]))])); },
     ...over };
   const asked: ModelRequest[] = [];
@@ -79,7 +82,7 @@ function fake(over: Partial<Record<Part, unknown>> = {}) {
 const NOW = () => new Date(2026, 10, 29, 11, 0);
 
 describe("live run 2, #29: her past week's dishes reach the setup and the plan", () => {
-  it("every reader gets her replies word for word; what the dishes read answers is saved as her library, with Sunday dinner ordered in", async () => {
+  it("every reader gets her replies word for word; her dishes are saved as her library, her category words on her meals' parts, with Sunday dinner ordered in", async () => {
     const f = fake();
     const k = await boot({ model: f.model, now: NOW });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
@@ -92,11 +95,15 @@ describe("live run 2, #29: her past week's dishes reach the setup and the plan",
     expect(d.system).toContain("library");
     const lib = k.rows("library").map((x) => `${x.name}@${x.slot}`);
     for (const n of ["Idli@Breakfast", "Rava idli@Breakfast", "Pancakes@Breakfast", "Paratha roll@Agastya's tiffin", "Vatha kozhambu@Lunch",
-      "Kerala coconut sambar@Lunch", "Biryani@Lunch", "Roti@Dinner", "North Indian sabji@Dinner"]) expect(lib).toContain(n);
+      "Kerala coconut sambar@Lunch", "Roti@Dinner", "North Indian sabji@Dinner"]) expect(lib).toContain(n);
+    // A bare "dosa" is her Plain dosa (§5.1); "biryani" is a category word: on Lunch's parts in her words, never a library row (§5.3).
+    expect(lib).toContain("Plain dosa@Breakfast");
+    expect(lib).not.toContain("Biryani@Lunch");
     expect(r.asks).not.toContain(DISHES_ASK);
     const fam = (await k.owner("GET", "/api/family")).body;
     expect(fam.slots.find((s: any) => s.name === "Dinner").skip_days).toEqual([{ day: "Sun", skip: "ordered_in" }]);
     expect(fam.slots.map((s: any) => s.name)).toContain("Agastya's tiffin");
+    expect(fam.slots.find((s: any) => s.name === "Lunch").templates.flatMap((t: any) => t.parts)).toContainEqual({ kind: "Biryani", words: "biryani" });
   });
 
   it("the agent's own one-line summary (what the live run sent) is refused before any model call", async () => {
@@ -122,19 +129,19 @@ describe("live run 2, #29: her past week's dishes reach the setup and the plan",
     expect(k.rows("slot_days").filter((x) => x.date)).toHaveLength(0);
   });
 
-  it("\"suggest some\": the week is planned from new dishes, each main meal counted as a full plate so the shortfall covers the week", async () => {
+  it("\"suggest some\": every meal is planned with new dishes where none of theirs is known, by code, with no budget", async () => {
     const f = fake({ dishes: { ok: false, code: "invalid_output", message: "no dishes in the answer" } });
-    const logs: string[] = [];
-    const orig = console.log;
-    console.log = (...a: unknown[]) => { logs.push(a.join(" ")); };
-    try {
-      const k = await boot({ model: f.model, now: NOW });
-      await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
-      await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
-    } finally { console.log = orig; }
-    const lunch = logs.find((l) => /feasibility Lunch:/.test(l)) ?? "";
-    // 7 days × 3 a plate = 21 places; a dish comes on 2 days at most: 11 new dishes, not 4.
-    expect(lunch).toContain("21 places (7 × 3), 0 from the library");
-    expect(lunch).toContain("11 new dishes of their kind");
+    const k = await boot({ model: f.model, now: NOW });
+    await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
+    const p = await k.op("make_plan", { week_start: "2026-11-30", suggest_new: true });
+    // The week is filled by code (kinds model): no model call plans a meal; every meal cooked at home has new dishes.
+    expect(f.of("plan").filter((r) => /meal plan: the week/.test(r.purpose ?? ""))).toHaveLength(0);
+    expect(p.ok).toBe(true);
+    const days = k.rows("slot_days").filter((x) => x.date && !x.skip);
+    expect(days.length).toBeGreaterThan(0);
+    const dishes = k.rows("slot_dishes");
+    for (const d of days) expect(dishes.filter((x) => x.slot_day_id === d.id).length).toBeGreaterThan(0);
+    expect(dishes.filter((x) => x.new === 1).length).toBeGreaterThan(dishes.length / 2);
   });
+
 });

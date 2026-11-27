@@ -9,6 +9,7 @@
 //   bun evals/eval-setup.ts --self-test                    TRUTH scored against itself: every field must pass (no model, no app)
 //   bun evals/eval-setup.ts --contains                     contains accuracy on the labelled dish set (40 dishes, add_dish's read)
 //   bun evals/eval-setup.ts --heldout                      the held-out households h9–h12 instead (milestones only; fresh chats)
+//   bun evals/eval-setup.ts --heldout2                     the second held-out set h15–h17 instead
 import { mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -21,15 +22,18 @@ import { CONTAINS_LABELS, scoreContains } from "./lib/contains-labels";
 import { misses, table } from "./lib/report";
 import type { Household } from "./lib/truth";
 
-const HELD = flag("heldout");
-const HH = pick(arg("only"), { heldout: HELD });
+const HELD2 = flag("heldout2");
+const HELD = flag("heldout") || HELD2;
+const HH = pick(arg("only"), { heldout: HELD, heldout2: HELD2 });
 const REPEAT = Number(arg("repeat") ?? 1);
 const MODEL = arg("model") ?? DEFAULT_UPSTREAM;
 const PERSONA = arg("persona-model") ?? DEFAULT_UPSTREAM;
+/** Flock's best tier upstream (owner, 27 Nov: OpenAI Sol). */
+const BEST = arg("best-model") ?? "openai/gpt-6.2-sol";
 const REUSE = arg("reuse-transcripts");
 const CONC = Number(arg("concurrency") ?? 4);
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
-const OUT = arg("out") ?? join(import.meta.dir, "results", `setup${HELD ? "-heldout" : ""}-${stamp}`);
+const OUT = arg("out") ?? join(import.meta.dir, "results", `setup${HELD2 ? "-heldout2" : HELD ? "-heldout" : ""}-${stamp}`);
 const log0 = console.log;
 if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "").startsWith("[planner]")) log0(...a); };
 // --prod-tiers: balanced reasons low, fast not at all, as Flock's routes run them. --fast-reads home,rules,dishes,often: those
@@ -37,7 +41,7 @@ if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "
 const FAST_READS = (arg("fast-reads") ?? "").split(",").filter(Boolean);
 const retier = FAST_READS.length ? (r: any) => (FAST_READS.some((id) => r.purpose === READ_PURPOSE[id]) ? { ...r, tier: "fast" } : r) : undefined;
 const READ_PURPOSE: Record<string, string> = { home: "setup: the home", rules: "setup: the food rules", dishes: "setup: the dishes", often: "setup: how often each dish" };
-const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL }, noThink: flag("no-think"), prodTiers: flag("prod-tiers"), retier, sink });
+const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL, best: BEST }, noThink: flag("no-think"), prodTiers: flag("prod-tiers"), retier, sink });
 
 if (flag("self-test")) {
   let bad = 0;
@@ -76,7 +80,8 @@ mkdirSync(join(OUT, "transcripts"), { recursive: true });
 async function runOne(h: Household, rep: number) {
   const tfile = (dir: string) => join(dir, "transcripts", `${h.id}-rep${rep}.json`);
   let tr: Transcript;
-  if (REUSE) {
+  // A household with fixed lines (h18, the owner's walk-through) is always run on them (interview() returns them).
+  if (REUSE && !h.transcript) {
     // A repeat past the saved ones reads the first chat again (the same words read again: the setup's own variance).
     const file = existsSync(tfile(REUSE)) ? tfile(REUSE) : join(REUSE, "transcripts", `${h.id}-rep1.json`);
     if (!existsSync(file)) throw new Error(`no transcript ${tfile(REUSE)}`);

@@ -36,6 +36,7 @@ export const house = sqliteTable("house", {
   intro_sent_at: text("intro_sent_at"),
   afternoon_time: text("afternoon_time"),                      // "HH:MM": when the afternoon reminder really runs, written by that routine
   evening_time: text("evening_time"),                          // "HH:MM": the same for the evening reminder
+  cuisines: text("cuisines"),                                  // JSON string[]: the family's cuisine profile (kinds.json cuisines), shown in the read-back; null = not read yet
   plan_time: text("plan_time"),                                // "HH:MM": the same for the weekly plan
   connected_apps: text("connected_apps"),                      // JSON GroceryApp[]: the shopping apps the family has signed in to (the main app only once it is)
   history_synced: text("history_synced"),                      // JSON { [app or "app:account"]: { [reader]: "YYYY-MM-DD" } }: how far each reader (a person's agent) read each app's order history, per shop account when named; a plain date is from before readers were kept apart
@@ -43,6 +44,7 @@ export const house = sqliteTable("house", {
   asks_confirmed: integer("asks_confirmed").default(0),
   asks_still_have: integer("asks_still_have").default(0),
   sync_session_id: text("sync_session_id"),                    // the session the last sync-cart ask started: the next one reuses it
+  meaning_model_at: text("meaning_model_at"),                  // when migrateMeaning moved this house to the one meaning model (the migration's marker)
   setup_state: text("setup_state"),                            // JSON: what apply_setup read beside the rows (the replies it read, who of the family cooks, weekday lunch, open asks), for a correction's diff
 });
 
@@ -58,6 +60,9 @@ export const slots = sqliteTable("slots", {
   skip_days: text("skip_days"),                                // JSON [{ day: weekday, skip: eaten_out | ordered_in }]: every week
   order: integer("order").notNull(),                           // planning order (constants.ts SLOT_ORDER)
   active: integer("active").default(1),
+  extras: integer("extras").default(0),                        // 1: an add-on beside the main plate: its people stay counted and fed at the main meal
+  kinds: text("kinds"),                                        // retired (one meaning model): nulled by migrateMeaning, never read; the kinds a meal has come from its templates (kinds.ts mealKinds)
+  templates: text("templates"),                                // JSON MealTemplate[] (kinds.ts): the ways it is plated, [Roti, Sabzi]; null = not read yet
 });
 
 /** One slot on one date: who it is for and the dishes made. A setup seed example (the family's past week) has no date and is
@@ -86,6 +91,7 @@ export const slot_dishes = sqliteTable("slot_dishes", {
   feedback_asked: integer("feedback_asked").default(0),        // 1: the next-day untried-dish question was sent for this placement; 2: the family answered it (record_feedback)
   note: text("note"),                                          // only when this dish needs a change for someone
   not_for: text("not_for"),                                    // JSON string[]: people at the slot-day a hard rule keeps it from (code's, never the model's); null/[] = everyone
+  for_people: text("for_people"),                              // JSON string[]: a dish only for these people (a swap's item); null = the slot-day's people
 });
 
 /** What a planned dish needs bought, in the amount for this family. The SQL table is dish_ingredients: "ingredients" is a
@@ -222,6 +228,7 @@ export const library = sqliteTable("library", {
   name: text("name").notNull(),
   frequency: text("frequency"),                                // usually | sometimes | rarely | "<n>/week"; null = the default (2 days at most)
   days: text("days"),                                          // JSON weekday[]: only these days; null = any day
+  said: text("said"),                                          // the family's own words for how often or which days ("rajma or chole twice a week"); null = none
   contains: text("contains"),                                  // JSON string[]: the tags it has (egg, meat, onion_garlic, white_rice, ...)
   contains_read: text("contains_read"),                        // JSON string[]: the tags read for it; a rule's tag not here is unknown
   origin: text("origin").notNull(),                            // setup_named | family_added | planner_suggested (constants.ts LIBRARY_ORIGINS)
@@ -238,6 +245,9 @@ export const library = sqliteTable("library", {
   rated_on: text("rated_on"),                                  // the day it was eaten
   rated_by: text("rated_by"),                                  // who said it, by name
   ratings: text("ratings"),                                    // JSON [{ rating, note, date, by }], newest first, a short history
+  kind: text("kind"),                                          // the kind it is a variant of (a catalog kind, or the slot's own kind); null = not mapped yet
+  sub: text("sub"),                                            // its catalog sub-kind ("Poriyal/Thoran"); null for an own kind or not mapped
+  catalog_item: text("catalog_item"),                          // the catalog item it is (kinds.json), whose contents it can take; null = a dish only this family makes
 }, (t) => [uniqueIndex("library_key_slot").on(t.key, t.slot)]);
 
 /** The family's food rules, one a row, each with the family's own words. Hard ones are always kept; soft ones (`frequency`)
@@ -250,6 +260,8 @@ export const rules = sqliteTable("rules", {
   slots: text("slots"),                                        // JSON string[]; null = every slot
   days: text("days"),                                          // JSON weekday[]; null = every day
   items: text("items"),                                        // JSON string[]: tags or categories ("white_rice", "@nuts")
+  targets: text("targets"),                                    // JSON RuleTarget[] (targets.ts): what the rule is about, a kind, sub-kind, item or ingredient
+  gives: text("gives"),                                        // JSON RuleTarget: what a swap gives instead
   to: text("to"),                                              // a swap's target ("millets")
   frequency: text("frequency"),                                // soft only: usually | sometimes | rarely | "<n>/week"
   per_meal: integer("per_meal"),                               // cap: dishes per meal

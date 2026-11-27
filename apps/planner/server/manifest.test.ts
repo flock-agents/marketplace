@@ -6,7 +6,7 @@ import { join } from "path";
 import { agentOps, FIELDS, FIELDS_SECTION, OPERATION_NAMES, ROUTES } from "./agentOps";
 import { APP_NAMES } from "./db/constants";
 import { SETUP_SYSTEM } from "./setup";
-import { CONTAINS_SYSTEM, FIX_SYSTEM, INGREDIENT_SYSTEM, SLOT_SYSTEM } from "./makePlan";
+import { CONTAINS_SYSTEM, GUESTS_SYSTEM, INGREDIENT_SYSTEM } from "./makePlan";
 import { EVENTS_SYSTEM } from "./planDays";
 import { DELIVER_PROMPT, FESTIVAL_PROMPT } from "./routines/weekly-plan";
 
@@ -15,7 +15,7 @@ const guide = readFileSync(join(import.meta.dir, "agent-guide.md"), "utf8");
 const instructions: string = manifest.agentInterface.instructions;
 const operations: { name: string; description: string }[] = manifest.agentInterface.operations;
 type Target = { operation?: string; setting?: string; preference?: string };
-type SetupQ = { id: string; ask?: string; reask?: string; clarify?: string; fallback?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[]; default?: unknown;
+type SetupQ = { id: string; ask?: string; recall?: string; reask?: string; clarify?: string; fallback?: string; help?: string; when?: string; fixed?: boolean; multi?: boolean; fills?: string[]; after?: string[]; default?: unknown;
   action?: string; args?: unknown; answer?: Target | Target[]; show?: Record<string, { operation: string; field: string }> };
 const setup: SetupQ[] = manifest.setup;
 const joiner: SetupQ[] = manifest.setupJoiner;
@@ -77,6 +77,13 @@ describe("the agent's interface", () => {
     const d = operations.find((o) => o.name === "set_cart_line")!.description;
     expect(d).toContain("lower");
     expect(d).not.toContain("change or take off a line of the cart being ordered");
+  });
+
+  it("the interview uses the weekly pattern the lunch question is built from", () => {
+    const uses: string[] = manifest.setupOptions.uses;
+    expect(uses).toContain("household.weekly");
+    for (const f of ["household.people", "household.children", "household.elders", "household.help", "household.mealsBy", "household.groceriesBy"]) expect(uses, f).toContain(f);
+    expect(uses.filter((f) => f.startsWith("household.school"))).toEqual([]);
   });
 
   it("the Pantry page has its label and the cook is never he or she", () => {
@@ -144,7 +151,7 @@ describe("the agent's interface", () => {
   // 3.4.0: Flock's interview runner sends every setup line as written and a model reads each reply into the facts and each
   // target's payload, reading `help`. So an ask is the line a person reads, and a help speaks to that reader, not the Butler.
   it("every setup line is the exact line a person reads, and every help is how to read the reply", () => {
-    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook", "householdMeals"];
+    const FLOCK_VALUES = ["firstName", "inviter", "sharedApps", "appLink", "appId", "appName", "plannerId", "offerLink", "sharedAppLink", "shareQuestion", "said", "menu", "householdPeople", "householdCook", "householdMeals", "you", "cookName", "children", "lunchKnown"];
     for (const q of [...setup, ...joiner]) {
       if (q.action) continue;
       expect(q.fixed, q.id).toBe(true);
@@ -170,7 +177,7 @@ describe("the agent's interface", () => {
     // Owner rules that stay: connectors first, past-week meals in detail, never brands or pack sizes, the final plan last.
     const ids = setup.map((q) => q.id);
     expect(ids.slice(0, 3)).toEqual(["pain", "apps", "mainApp"]);
-    for (const id of ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"]) expect(setup.find((q) => q.id === id)!.multi, id).toBe(true);
+    for (const id of ["familyBreakfast", "familyLunch", "familyDinner", "childMeals"]) expect(setup.find((q) => q.id === id)!.multi, id).toBe(true);
     for (const q of setup) expect(q.ask ?? "", q.id).not.toMatch(/\b(brand|pack size)/i);
     const final = setup[setup.length - 1];
     expect([final.id, final.action, final.args]).toEqual(["final", "make_plan", {}]);
@@ -192,7 +199,7 @@ describe("the agent's interface", () => {
       expect(q.ask ?? "", q.id).not.toMatch(/[()]/);
       expect(Boolean(q.fallback), `${q.id} (${q.when ?? "always"}) fallback iff its ask has a value`).toBe(/\{\{\w+\}\}/.test(q.ask ?? ""));
     }
-    expect(setup.find((q) => q.id === "cook" && q.when === "household.help has cook")!.reask).toBe("Which meals does the cook make, and when does the cook come?");
+    expect(setup.find((q) => q.id === "cook")!.reask).toBe("Which meals does your cook make, and when does she come?");
     expect(setup.find((q) => q.id === "orderFindings")!.fallback).toBe("Is there anything your home buys every week that I should know about?");
   });
 
@@ -203,62 +210,122 @@ describe("the agent's interface", () => {
     const cook = operations.find((o) => o.name === "set_cook")!.description;
     for (const text of [guide, cook]) for (const said of ["wont_make", "time_limit", "which dishes?", "not only the swap"]) expect(text, said).toContain(said);
   });
-  // The past week's meals: each answer is read into its fact in the family's words, an extra meal said there (a tiffin, an
-  // evening snack) with it, for apply_setup to save. The answer targets stay for a Flock without setupApply.
-  it("every past-week meal question reads the dishes and any extra meal said, and the meals part ends with no read-back", () => {
-    const MEALS = ["kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner"];
-    for (const id of MEALS) {
-      const q = setup.find((x) => x.id === id)!;
-      expect(q.fills, id).toEqual([`pastWeek.${id}:text`]);
-      expect(targets(q), id).toEqual([]);
-      expect(q.help, id).toContain("extra meal");
-      expect(q.help, id).toContain("in their words");
-    }
-    const ids = setup.map((q) => q.id);
-    expect(ids[ids.indexOf("adultsDinner") + 1]).toBe("diet");
-    expect(ids.filter((id) => id.toLowerCase().includes("tiffin"))).toEqual([]);
+  // 26 Nov (one meaning model, spec §6.1, §10): the meal questions are the contract's, in its order.
+  const askedIds = (): string[] => [...new Set(setup.map((q) => q.id))];
+  const first = (id: string) => setup.find((q) => q.id === id)!;
+  it("the meal questions are the contract's, in its order", () => {
+    expect(askedIds()).toEqual(["pain", "apps", "mainApp", "lunchWhere", "cook", "cookTime", "otherDays", "childSame", "familyBreakfast", "familyLunch", "familyDinner",
+      "childMeals", "differently", "subscriptions", "connectLater", "orderFindings", "final"]);
+    for (const gone of ["people", "cookingDays", "kidsBreakfast", "kidsLunch", "kidsDinner", "adultsBreakfast", "adultsLunch", "adultsDinner", "diet", "elders", "rules", "orderIn"])
+      expect(askedIds(), gone).not.toContain(gone);
+    expect(first("pain").ask).toBe("What's the hardest part of meals for you? Or something else.");
   });
 
-  it("everyone at home is saved before any rule can name them, from the household answer", () => {
-    const ids = setup.map((q) => q.id);
-    const people = setup.find((q) => q.id === "people")!;
-    expect(targets(people)).toEqual(["set_person"]);
-    expect(people.help).toContain("household.people");
-    const firstRule = setup.findIndex((q) => q.id === "diet");
-    expect(ids.indexOf("people")).toBeLessThan(firstRule);
+  it("each fact is the contract's, each help names what it fills, and every meal question is read in their words", () => {
+    const fills: Record<string, string[]> = {
+      lunchWhere: ["lunchWhere:text"], cook: ["cook:text"], cookTime: ["cookTime:text"], otherDays: ["otherDays:text"],
+      childSame: ["childSame:text", "childDiffers:list"], familyBreakfast: ["pastWeek.breakfast:text"], familyLunch: ["pastWeek.lunch:text"],
+      familyDinner: ["pastWeek.dinner:text"], childMeals: ["childMeals:text"], differently: ["differently:text"],
+    };
+    for (const [id, f] of Object.entries(fills)) for (const q of setup.filter((x) => x.id === id)) {
+      expect(q.fills, id).toEqual(f);
+      expect(targets(q), `${id} writes nothing: apply_setup does`).toEqual([]);
+      expect(q.help ?? "", id).toContain("in their words");
+    }
+    expect(first("childSame").help).toContain("person, meals");
+    for (const id of ["familyBreakfast", "familyLunch", "familyDinner"]) expect(first(id).help, id).toContain("extra meal");
+    for (const q of setup) expect(targets(q), `${q.id} writes no person`).not.toContain("set_person");
   });
 
-  // The owner, 22 Nov: the cook and cooking-days questions repeated the household answer, and the elders question half
-  // repeated the diet answer. The cook's facts fill from household.help; cooking days asks only what the cook's days leave.
-  it("the cook's facts fill from the household answer, and the cooking-days and elders questions ask only what is still unknown", () => {
-    const cook = setup.filter((q) => q.id === "cook");
-    for (const q of cook) {
-      expect(q.fills).toEqual(["cook.name:text", "cook.days:list", "cook.visits:list"]);
-      expect(targets(q)).toEqual(["set_cook"]);
-      expect(q.help).toContain("household.help");
-      expect(q.help).toContain("Rani comes at 7 for breakfast and lunch and 6 for dinner");
-      expect(q.when).toStartWith("household.help has cook");
+  it("childSame asks only with children; childMeals only when one differs", () => {
+    expect(first("childSame").when).toBe("household.children");
+    expect(first("childMeals").when).toBe("childDiffers");
+  });
+
+  it("the approved wording, word for word", () => {
+    const ask = (id: string, when?: string) => setup.find((q) => q.id === id && q.when === when)!;
+    expect(first("lunchWhere").ask).toBe("{{lunchKnown}} Who carries lunch from home, and who eats out?");
+    expect(first("cook").ask).toBe("Which meals does {{cookName}} make, and when does she come?");
+    expect(first("cookTime").ask).toBe("Is {{cookName}} short of time, so only a few dishes?");
+    expect(ask("otherDays", "household.help has cook").ask).toBe("On her days off, who cooks, and is any meal eaten out or ordered in?");
+    expect(setup.filter((q) => q.id === "otherDays").at(-1)!.ask).toBe("Who cooks at home, and is any meal eaten out or ordered in, on which days?");
+    expect(first("childSame").ask).toBe("For {{children}}: the family's food, or something else at some meals? And a box for school?");
+    for (const [id, meal] of [["familyBreakfast", "breakfast"], ["familyLunch", "lunch"], ["familyDinner", "dinner"]])
+      expect(first(id).ask).toBe(`What did the family have for ${meal} over the past week? Tell me the dishes.`);
+    expect(first("childMeals").ask).toBe("What's on the plate for {{children}} at those meals, and what goes in the box?");
+    expect(first("differently").ask).toBe("Does anyone eat differently: something they don't eat, an allergy, less spice or salt, a fasting day, or something extra on their plate?");
+  });
+
+  it("the child questions read right for one child or several: no verb agrees with {{children}}", () => {
+    const texts = [first("childSame").ask, first("childSame").recall, first("childMeals").ask].map((t) => t ?? "");
+    expect(first("childSame").recall).toBe("You said: {{heard}}. Anything else about meals for {{children}}?");
+    for (const t of texts) {
+      expect(t).not.toMatch(/\b[Dd]oes \{\{children\}\}/);
+      expect(t).not.toMatch(/\{\{children\}\} eats/);
+      for (const names of ["Aditi and Ishaan", "Agastya"]) {
+        const filled = t.replace(/\{\{children\}\}/g, names).replace("{{heard}}", "idli");
+        expect(filled).not.toMatch(new RegExp(`[Dd]oes ${names}|${names} eats`));
+      }
     }
-    expect(cook[cook.length - 1].when).toBe("household.help has cook");
-    const days = setup.filter((q) => q.id === "cookingDays");
-    const ask = (when: string) => days.find((q) => q.when === when)?.ask;
-    // Every day is planned (owner, 23 Nov): the cook's days off ask who cooks, never whether the day is skipped.
-    expect(ask("cook.days = mon,tue,wed,thu,fri,sat")).toBe("On Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?");
-    expect(ask("cook.days = mon,tue,wed,thu,fri")).toBe("On Saturday and Sunday, when the cook doesn't come, who cooks? Or is a meal eaten out?");
-    expect(ask("!cook.days")).toBe("Who cooks at home, and on which days? Is any day's meal eaten out?");
-    for (const q of days) {
-      expect(q.fills).toEqual(["cookingDays:list"]);
-      expect(q.default).toEqual(["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
-      expect(q.help).toContain("Every day is planned");
+  });
+
+  it("otherDays gates only on facts that something fills: two variants, the cook's presence", () => {
+    const days = setup.filter((q) => q.id === "otherDays");
+    expect(days.map((q) => q.when)).toEqual(["household.help has cook", "household.people"]);
+    for (const q of setup) expect(q.when ?? "", `${q.id} gates on cook.days, which nothing fills`).not.toMatch(/cook\.(days|visits|name)/);
+    expect(setup.some((q) => (q.fills ?? []).some((f) => f.startsWith("cook.")))).toBe(false);
+  });
+
+  // Flock asks the FIRST variant whose `when` holds (engine/spec.ts), so variant 2 catches every home without a cook.
+  it("for a household with only a maid, or no help, exactly the no-cook otherDays is asked; with a cook, the cook's", () => {
+    // The same reading of a `when` as Flock's engine/facts.ts: terms joined by " and "; name; !name; name has word.
+    const holds = (when: string, facts: Record<string, unknown>): boolean => when.split(/\s+and\s+/).every((raw) => {
+      const m = raw.trim().match(/^(!?)([\w.]+)(?:\s+has\s+(.+))?$/)!;
+      const v = facts[m[2]];
+      const ok = m[3] === undefined ? (Array.isArray(v) ? v.length > 0 : !!v)
+        : Array.isArray(v) && v.some((x) => (x && typeof x === "object" ? Object.values(x) : [x]).some((f) => String(f).toLowerCase() === m[3].toLowerCase()));
+      return m[1] ? !ok : ok;
+    });
+    const askedFor = (facts: Record<string, unknown>) => setup.filter((q) => q.id === "otherDays").find((q) => !q.when || holds(q.when, facts))?.ask;
+    const people = [{ name: "Ankita", relation: "self" }];
+    expect(askedFor({ "household.people": people, "household.help": [{ role: "maid" }] })).toStartWith("Who cooks at home");
+    expect(askedFor({ "household.people": people })).toStartWith("Who cooks at home");
+    expect(askedFor({ "household.people": people, "household.help": [{ role: "maid" }, { role: "cook", days: "Mon-Sat" }] })).toStartWith("On her days off");
+  });
+
+  it("a question that names the cook asks only when there is a cook", () => {
+    const namesCook = /\{\{cookName\}\}|\bcook\b|\b(she|her)\b/i;
+    for (const q of setup) {
+      if (!namesCook.test([q.ask, q.recall, q.reask, q.fallback].filter(Boolean).join(" "))) continue;
+      expect(q.when ?? "", `${q.id} names the cook`).toMatch(/(^|\band\s+)household\.help has cook\b/);
     }
-    // Variants of one question: each has a when, and the general one is the last.
-    expect(days.every((q) => typeof q.when === "string")).toBe(true);
-    expect(days[days.length - 1].when).toBe("!cook.days");
-    const diet = setup.find((q) => q.id === "diet")!;
-    expect(diet.fills).toContain("dietElders:text");
-    const elders = setup.filter((q) => q.id === "elders");
-    expect(elders.map((q) => q.when)).toEqual(["household.elders and dietElders", "household.elders"]);
-    for (const q of elders) expect(q.ask).not.toMatch(/sugar|diabet/i);
+    // The variant that does not name the cook is the one for a home with no help.
+    expect(setup.filter((q) => q.id === "otherDays").at(-1)!.when).toBe("household.people");
+  });
+
+  it("a recall carries what was heard and nothing else; {{children}} only where there are children", () => {
+    const recalls = setup.filter((q) => q.recall !== undefined);
+    expect(recalls.map((q) => q.id)).toEqual(["lunchWhere", "cook", "otherDays", "otherDays", "childSame", "familyBreakfast", "familyLunch", "familyDinner", "childMeals", "differently"]);
+    for (const q of recalls) {
+      const r = q.recall!;
+      expect(r, q.id).toMatch(/\{\{heard\}\}/);
+      for (const [, name] of r.matchAll(/\{\{(\w+)\}\}/g)) {
+        if (name === "heard") continue;
+        expect(name, `${q.id} recall`).toBe("children");
+        expect(q.when, `${q.id} recall names the children`).toContain("household.children");
+      }
+      expect(r, q.id).not.toMatch(/[()\[\]]/);
+    }
+    expect(first("cookTime").recall).toBeUndefined();
+  });
+
+  it("no meal question calls a child he, she or their, and each asks about the past week or says nothing about it", () => {
+    for (const id of ["childSame", "childMeals"]) for (const q of setup.filter((x) => x.id === id))
+      for (const k of ["ask", "recall", "reask", "fallback"] as const) expect(q[k] ?? "", `${id}.${k}`).not.toMatch(/\b(he|she|his|her|him|their|they|them)\b/i);
+    for (const q of setup.filter((x) => /^family(Breakfast|Lunch|Dinner)$/.test(x.id))) {
+      expect(q.ask).toContain("over the past week");
+      for (const k of ["ask", "recall", "reask"] as const) expect(q[k] ?? "", `${q.id}.${k}`).not.toMatch(/something different/);
+    }
   });
 
   it("the instructions fit in 1,200 characters and the guide in 150 lines", () => {
@@ -340,7 +407,7 @@ describe("the agent's interface", () => {
   // Owner, 23 Nov: the test family's names and lines (the simulated runs' family) are in no text a model reads, so a model
   // copying an example cannot pass as having read the family. Tests may keep them; every model-facing string may not.
   it("no model-facing text names the test family or its lines", () => {
-    const texts = [JSON.stringify(manifest), guide, SETUP_SYSTEM, SLOT_SYSTEM, FIX_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT("2026-11-30")];
+    const texts = [JSON.stringify(manifest), guide, SETUP_SYSTEM, GUESTS_SYSTEM, CONTAINS_SYSTEM, INGREDIENT_SYSTEM, EVENTS_SYSTEM, DELIVER_PROMPT(true), FESTIVAL_PROMPT("2026-11-30")];
     for (const t of texts) for (const word of [/shiva/i, /ankita/i, /agastya/i, /gowri/i, /lakshmi/i, /nut-free/i, /fasts thursday/i])
       expect(t, String(word)).not.toMatch(word);
   });

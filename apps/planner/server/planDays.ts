@@ -4,9 +4,10 @@
 // eat; a slot the family eats out or orders in that weekday is skipped. A slot-day the family changed (`edited`) is kept as
 // it is. Nothing here reads the meaning of a word: a calendar event whose effect on meals code cannot see from its fields
 // goes to one small model call (eventsRead), and what that call is unsure of is asked of the family.
-import { CALENDAR_APP, MAIN_SLOT_HOURS, SLOT_ORDER, type Skip } from "./db/constants";
+import { CALENDAR_APP, INSTEAD_STEP, MAIN_SLOT_HOURS, SLOT_ORDER, type Skip } from "./db/constants";
 import { addDays, weekDates, weekdayOf, type Weekday } from "./dates";
 import { isObject } from "./family";
+import type { EventAsk } from "./messages";
 import type { ModelCall, ModelResult } from "./model";
 import type { Guest, Rule, Slot, SlotDay } from "./slotStore";
 
@@ -111,7 +112,7 @@ export function platformPeers(platform: unknown): Peers {
 /** One change to who eats at home: `people` away from, or joining, the given dates' slots (all slots when null). */
 export type Attendance = { effect: "away" | "joins"; people: string[]; dates: string[]; slots: string[] | null; why: string };
 /** An event or stay as the plan reads it, from either source. */
-type Happening = { id: string; title: string; who: string | null; from: string; to: string; start_time?: string; end_time?: string; notes?: string; slots?: string[] };
+type Happening = { id: string; title: string; who: string | null; from: string; to: string; repeat?: string; start_time?: string; end_time?: string; notes?: string; slots?: string[] };
 
 const EVENTS_SCHEMA = { type: "object", required: ["changes"], properties: { changes: { type: "array", items: { type: "object", required: ["id", "effect"], properties: {
   id: { type: "string" }, effect: { type: "string", enum: ["away", "joins", "none", "unsure"] }, people: { type: "array", items: { type: "string" } },
@@ -124,26 +125,59 @@ export const EVENTS_SYSTEM = [
   "Never guess: an entry you cannot read for meals is unsure.",
 ].join("\n");
 
+/** Is a calendar entry part of its person's week (owner, 25 Nov: never asked, never read): everyone it names has a weekday
+ *  pattern (household.weekly) that has them out on each of its days in the week, and the entry is that routine: it repeats
+ *  (a weekly class, school, office), is the pattern's place by name ("Office" for an office pattern; "School trip to Udaipur"
+ *  is more than the place, and read), or sits inside the
+ *  pattern's hours. A one-off entry on such a day (a dinner out, a trip) may change who eats at home: not covered. */
+export function coveredByWeek(h: { title: string; who: string | null; from: string; to: string; repeat?: string; start_time?: string; end_time?: string },
+  weekly: Weekly[] | null | undefined, week: { from: string; to: string }): boolean {
+  if (!weekly?.length || !h.who) return false;
+  const names = h.who.split(/\s*(?:,|&|\band\b)\s*/i).map((x) => x.trim()).filter(Boolean);
+  const days: Weekday[] = [];
+  for (let d = h.from < week.from ? week.from : h.from; d <= (h.to > week.to ? week.to : h.to); d = addDays(d, 1)) days.push(weekdayOf(d));
+  if (!names.length || !days.length) return false;
+  const out = (w: Weekly) => (w.where ? !same(w.where, "home") : w.lunch === "away" || w.lunch === "carries");
+  // The title is the place itself ("Office", "<name> school"), not more ("School trip to Udaipur", "Office offsite": those may
+  // take them away from meals at home, so they are read).
+  const wordsOf = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const nameWords = new Set(names.flatMap(wordsOf));
+  const title = wordsOf(h.title).filter((x) => !nameWords.has(x));
+  const isPlace = (w: Weekly) => !!w.where && title.length > 0 && title.every((x) => wordsOf(w.where).includes(x));
+  return names.every((n) => {
+    const mine = weekly.filter((w) => same(w.person, n) && out(w));
+    if (!days.every((d) => mine.some((w) => w.weekdays.includes(d)))) return false;
+    const repeats = !!h.repeat && h.repeat !== "none";
+    return repeats || mine.some((w) => isPlace(w)
+      || (!!w.from && !!w.to && !!h.start_time && !!h.end_time && w.from <= h.start_time && h.end_time <= w.to));
+  });
+}
+
 /** Every happening of the week from the calendar (or, with none, the household's dated stays), read into attendance changes:
- *  a deadline changes nothing (code); every other entry goes to one small fast call; what it is unsure of, or what the call
- *  could not read, is `asked`. A stop (no credits, the day's budget) is answered as is. */
+ *  a deadline changes nothing (code), nor an entry that is part of its person's week (coveredByWeek, code); every other
+ *  entry goes to one small fast call; what it is unsure of, or what the call could not read, is `asked` (folded into the
+ *  plan's one question). A stop (no credits, the day's budget) is answered as is. */
 export async function readEvents(o: { events: CalendarEvent[] | null; dated: Dated[]; from: string; to: string; people: string[]; slots: string[];
-  model: (req: Parameters<ModelCall>[0]) => Promise<ModelResult>; log: (l: string) => void }): Promise<{ changes: Attendance[]; asked: string[]; stop?: Extract<ModelResult, { ok: false }> }> {
+  weekly?: Weekly[] | null; model: (req: Parameters<ModelCall>[0]) => Promise<ModelResult>; log: (l: string) => void }): Promise<{ changes: Attendance[]; asked: EventAsk[]; stop?: Extract<ModelResult, { ok: false }> }> {
   const list: Happening[] = o.events
     ? o.events.filter((e) => e.kind !== "deadline").map((e) => ({ id: e.id || `${e.title}@${e.date}`, title: e.title, who: str(e.who) || null, from: e.date,
-      to: isDate(e.end_date) ? e.end_date : e.date, ...(e.start_time ? { start_time: e.start_time } : {}), ...(e.end_time ? { end_time: e.end_time } : {}), ...(e.notes ? { notes: e.notes } : {}) }))
+      to: isDate(e.end_date) ? e.end_date : e.date, ...(e.repeat ? { repeat: e.repeat } : {}), ...(e.start_time ? { start_time: e.start_time } : {}), ...(e.end_time ? { end_time: e.end_time } : {}), ...(e.notes ? { notes: e.notes } : {}) }))
     : o.dated.map((d, i) => ({ id: `dated-${i}`, title: d.what, who: d.person ?? null, from: d.from, to: d.to ?? d.from, ...(d.slots?.length ? { slots: d.slots } : {}) }));
-  const inWeek = list.filter((h) => h.from <= o.to && h.to >= o.from);
+  const week = { from: o.from, to: o.to };
+  const all = list.filter((h) => h.from <= o.to && h.to >= o.from);
+  const inWeek = all.filter((h) => !coveredByWeek(h, o.weekly, week));
+  if (all.length > inWeek.length) o.log(`calendar: ${all.length - inWeek.length} entr${all.length - inWeek.length === 1 ? "y" : "ies"} part of the weekly routine, not read`);
   if (!inWeek.length) return { changes: [], asked: [] };
-  const asked = (h: Happening) => `"${h.title}"${h.who ? ` (${h.who})` : ""}, ${h.from === h.to ? weekdayOf(h.from) : `${weekdayOf(h.from < o.from ? o.from : h.from)} to ${weekdayOf(h.to > o.to ? o.to : h.to)}`}: does it change who eats at home?`;
-  const r = await o.model({ tier: "fast", purpose: "meal plan: calendar entries", system: EVENTS_SYSTEM, schema: EVENTS_SCHEMA, maxTokens: 1500,
+  const asked = (h: Happening): EventAsk => ({ title: h.title, who: h.who,
+    when: h.from === h.to ? weekdayOf(h.from) : `${weekdayOf(h.from < o.from ? o.from : h.from)} to ${weekdayOf(h.to > o.to ? o.to : h.to)}` });
+  const r = await o.model({ tier: "balanced", purpose: "meal plan: calendar entries", system: EVENTS_SYSTEM, schema: EVENTS_SCHEMA, maxTokens: 1500,
     user: JSON.stringify({ week: { from: o.from, to: o.to }, people: o.people, slots: o.slots, entries: inWeek }) });
   if (!r.ok) {
     o.log(`calendar read failed (${r.code}): ${inWeek.length} entr${inWeek.length === 1 ? "y" : "ies"} asked`);
     return { changes: [], asked: inWeek.map(asked), ...(["out_of_credits", "daily_budget", "rate_limited", "not_declared", "bad_request"].includes(r.code) ? { stop: r } : {}) };
   }
   const raw = isObject(r.json) && Array.isArray(r.json.changes) ? r.json.changes : [];
-  const changes: Attendance[] = [], out: string[] = [];
+  const changes: Attendance[] = [], out: EventAsk[] = [];
   for (const h of inWeek) {
     const c = raw.find((x) => isObject(x) && x.id === h.id) as Record<string, unknown> | undefined;
     const effect = c?.effect;
@@ -169,10 +203,12 @@ export async function readEvents(o: { events: CalendarEvent[] | null; dated: Dat
 export type PlanDay = { date: string; slot: string; people: string[]; guests: Guest[]; occasion: string | null; new_dishes_allowed: number | null;
   skip: Skip | null; edited: boolean; fixed: boolean; why: string[]; fasting: string[]; dishes: string[]; note: string | null };
 
-/** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too). */
-export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string): boolean {
+/** Does a rule hold on this slot-day: its days, and its slots (an add-on slot is held by its main slot's rules too; so is a box
+ *  that replaces the meal, the week's `slots`: a meal's rules hold at the box eaten in its place, §5.4). */
+export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: Slot | undefined, slotName: string, slots: Slot[]): boolean {
   if (r.days?.length && !r.days.includes(weekdayOf(date))) return false;
-  if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)))) return false;
+  const meal = slot ? replacedMeal(slot, slots) : null;
+  if (r.slots?.length && !r.slots.some((s) => same(s, slotName) || (!!slot?.addon_of && same(s, slot.addon_of)) || (!!meal && same(s, meal.name)))) return false;
   return true;
 }
 
@@ -180,13 +216,25 @@ export function ruleHolds(r: Pick<Rule, "days" | "slots">, date: string, slot: S
  *  (away: not eating the home lunch; carries: the home lunch is cooked for them and packed, so they count; home: at home);
  *  else the pattern's hours covering the slot's whole span (MAIN_SLOT_HOURS: school at 7:30 still eats breakfast, back at
  *  9 still eats dinner); else home. */
+function coversSpan(w: Weekly, order: number): boolean {
+  const span = MAIN_SLOT_HOURS[order];
+  return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);
+}
 function awayBy(w: Weekly, day: Weekday, slot: Slot): boolean {
   if (!w.weekdays.includes(day) || w.where === "home") return false;
   const base = slot.kind === "main" ? slot : null;
   const order = base?.order;
+  // A school child is off weekday Lunch unless they carry the home lunch (§5.4; owner, 26 Nov: coming home for lunch is not a case).
+  if (order === SLOT_ORDER.Lunch && /school/i.test(w.where) && w.lunch !== "carries" && coversSpan(w, order)) return true;
   if (order === SLOT_ORDER.Lunch && w.lunch) return w.lunch === "away";
   const span = order != null ? MAIN_SLOT_HOURS[order] : undefined;
   return !!(span && w.from && w.to && w.from <= span[0] && span[1] <= w.to);
+}
+
+/** The main meal a custom slot replaces (§5.4): the main slot one INSTEAD_STEP before it, when the slot names its people. */
+export function replacedMeal(s: Pick<Slot, "kind" | "order" | "usual_people">, slots: Slot[]): Slot | null {
+  if (s.kind !== "custom" || !s.usual_people.length) return null;
+  return slots.find((m) => m.kind === "main" && m.order + INSTEAD_STEP === s.order) ?? null;
 }
 
 /** The key of a slot-day in a set of them: its date and its slot's name, any capitals. */
@@ -227,6 +275,16 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
         const p = people.find((x) => same(x, w.person));
         if (p && awayBy(w, day, main)) { people = people.filter((x) => x !== p); why.push(`${p}: ${w.where || "away"} on ${day}`); }
       }
+      // A box that replaces this meal takes its people off it, on the days it runs and when they are at the box that day.
+      if (s.kind === "main") for (const b of o.slots) {
+        if (b.active === false || replacedMeal(b, o.slots) !== s || (b.days.length && !b.days.includes(day))) continue;
+        for (const bp of b.usual_people) {
+          const p = people.find((x) => same(x, bp));
+          if (!p || o.changes.some((c) => c.effect === "away" && c.dates.includes(date) && c.people.some((x) => same(x, bp))
+            && (!c.slots || c.slots.some((x) => same(x, b.name))))) continue;
+          people = people.filter((x) => x !== p); why.push(`${p}: has ${b.name} on ${day}`);
+        }
+      }
       for (const c of o.changes) {
         if (!c.dates.includes(date) || (c.slots && !c.slots.some((x) => same(x, s.name) || (!!s.addon_of && same(x, s.addon_of))))) continue;
         if (c.effect === "away") for (const p of c.people) { if (people.some((x) => same(x, p))) { people = people.filter((x) => !same(x, p)); why.push(`${p}: ${c.why}`); } }
@@ -234,7 +292,7 @@ export function buildDays(o: { weekStart: string; from: string; slots: Slot[]; p
         else if (!s.usual_people.length || s.kind === "main") for (const p of c.people) if (!people.some((x) => same(x, p))) { people.push(p); why.push(`${p} joins: ${c.why}`); }
       }
       // Fasting: with nothing to eat, the person is not at this slot-day; with fasting food, they stay, with a note.
-      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name))) {
+      for (const r of o.rules.filter((x) => x.what === "fasting" && ruleHolds(x, date, s, s.name, o.slots))) {
         const who = r.who ? people.filter((p) => same(p, r.who!)) : [...people];
         if (!who.length) continue;
         if (r.fasting_food?.length) for (const p of who) fasting.push(`${p} fasts: only ${r.fasting_food.join(", ")} (${r.quote})`);

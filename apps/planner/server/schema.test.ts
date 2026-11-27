@@ -23,6 +23,11 @@ describe("planner data", () => {
     for (const t of ["plan_meals", "dishes", "dish_items", "dish_book"]) expect(tables, t).not.toContain(t);
     const cols = (t: string) => (kit.sqlite.query(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
     expect(cols("slots")).toEqual(expect.arrayContaining(["name", "kind", "addon_of", "usual_people", "days", "skip_days", "order", "active"]));
+    // One meaning model (§5.1, §5.2, §5.4): the typed columns; slots.kinds stays (retired, additive-only schema).
+    expect(cols("slots")).toEqual(expect.arrayContaining(["extras", "kinds", "templates"]));
+    expect(cols("rules")).toEqual(expect.arrayContaining(["targets", "gives"]));
+    expect(cols("slot_dishes")).toContain("for_people");
+    expect(cols("house")).toContain("meaning_model_at");
     expect(cols("slot_days")).toEqual(expect.arrayContaining(["date", "slot", "people", "guests", "occasion", "new_dishes_allowed", "skip", "status", "edited", "note"]));
     expect(cols("slot_dishes")).toEqual(expect.arrayContaining(["slot_day_id", "position", "dish", "new", "feedback_asked", "note"]));
     expect(cols("dish_ingredients")).toEqual(expect.arrayContaining(["slot_dish_id", "item", "amount", "unit"]));

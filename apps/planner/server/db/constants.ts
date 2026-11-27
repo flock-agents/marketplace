@@ -12,6 +12,8 @@ export const SLOT_KINDS = ["main", "custom", "addon"] as const;
 export type SlotKind = (typeof SLOT_KINDS)[number];
 /** Planning order: Breakfast 10, a custom slot from breakfast (a tiffin) 20, Lunch 30, snacks 40, Dinner 50, add-ons 60 on. */
 export const SLOT_ORDER = { Breakfast: 10, tiffin: 20, Lunch: 30, snack: 40, Dinner: 50, addon: 60 } as const;
+/** A person's own meal in place of a main meal (a custom slot) sits this far after it in the day's order: its meal is that one. */
+export const INSTEAD_STEP = 5;
 /** A slot-day not cooked at home. */
 export const SKIPS = ["eaten_out", "ordered_in"] as const;
 export type Skip = (typeof SKIPS)[number];
@@ -47,6 +49,10 @@ export const BASE_TAGS = ["egg", "meat", "fish", "onion_garlic", "nuts", "peanut
 export const LINT_DAY_WORDS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mondays", "tuesdays", "wednesdays",
   "thursdays", "fridays", "saturdays", "sundays", "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun", "weekend", "weekends",
   "weekday", "weekdays", "daily", "everyday", "day", "days", "night", "nights", "morning", "mornings", "evening", "evenings"] as const;
+/** The frequency words a family says (J5): the saved ones, and their everyday forms. A quote with one and no frequency saved is
+ *  linted like a day or count word: words only to spot it, the model reads what they mean. */
+export const LINT_FREQUENCY_WORDS = [...FREQUENCY_WORDS, "mostly", "often", "generally", "normally", "typically", "regularly", "occasionally", "occasional",
+  "seldom", "sometime", "everyday"] as const;
 export const LINT_COUNT_WORDS = ["once", "twice", "thrice", "one", "two", "three", "four", "five", "six", "seven"] as const;
 /** Staples are counted from confirmed slot-days only (the setup seed is stored confirmed, so it counts); a planned slot-day
  *  never feeds a staple (owner, 23 Nov: the plan's own output must not feed back into it). Flip to let planned ones count. */
@@ -54,15 +60,12 @@ export const STAPLES_FROM_PLANNED = false;
 
 // ── The weekly plan (make_plan, spec §5; decided defaults, tunable) ──
 
-/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A dish with nothing said comes on
- *  DEFAULT_DISH_DAYS days at most; a daily dish on every slot-day of its slot. */
+/** The days (inclusive range [min, max]) a week a dish or a soft rule comes, by how often. A daily dish comes on every
+ *  slot-day of its slot. A dish with nothing said has no count: the rotation spreads it (kinds model, owner 25 Nov). */
 export const FREQUENCY_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", [number, number]> = { usually: [4, 5], sometimes: [2, 3], rarely: [0, 1], daily: [7, 7] };
-export const DEFAULT_DISH_DAYS = 2;
-/** A non-staple dish is not on a slot within this many days of itself; the feasibility check may widen it to the relaxed one. */
-export const REPEAT_WINDOW_DAYS = 3;
-export const REPEAT_WINDOW_RELAXED = 2;
-/** At most this many slot calls run at once. */
-export const SLOT_CALLS_AT_ONCE = 3;
+/** How many days of a 7-day week a meal's template comes when the family said it in words ("usually", "sometimes"): a part
+ *  week has its share of these. "<n>/week" is exactly n. */
+export const TEMPLATE_DAYS: Record<"usually" | "sometimes" | "rarely" | "daily", number> = { usually: 5, sometimes: 2, rarely: 1, daily: 7 };
 /** At most this many dishes a contains read asks about in one call. */
 export const CONTAINS_BATCH = 40;
 /** A tag that is a kind of another: a chicken dish has meat, a peanut dish has nuts. */
@@ -125,9 +128,6 @@ export const appOf = (v: unknown): GroceryApp | null => (typeof v === "string" ?
 /** Can the agent copy a cart into the app? Amazon has no cart tool: its cart is built when the family orders. */
 export const CART_SYNC: Record<GroceryApp, boolean> = { zepto: true, "swiggy-instamart": true, "zomato-blinkit": true, bigbasket: true, amazon: false };
 
-/** Dishes served with most meals: a week may hold them on many days without counting as a repeat. */
-export const STAPLE_DISHES = ["roti", "rotis", "chapati", "chapatis", "phulka", "phulkas", "rice", "plain rice", "steamed rice", "curd", "dahi", "raita",
-  "salad", "papad", "pickle", "buttermilk", "chaas", "milk", "fruit", "fruits"] as const;
 
 /** How often the family has a dish, or keeps a soft rule, in their words (owner, 23 Nov): usually (most days, most nights,
  *  daily), sometimes (sometimes, "when he's tired", now and then), rarely (once in a while, occasionally). */

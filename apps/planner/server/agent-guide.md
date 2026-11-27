@@ -72,7 +72,7 @@ word for word, or `say` when it answers `planned: false`):
   many new dishes a week (`set_setting`). The app reads what a dish contains itself.
 - "We made khichdi instead" (said by them, never asked): `record_made { date, slot, dishes }`.
 
-- **A plan's question about a meal short of dishes** ("I only know 2 dishes for <meal> … What else does <person> have? Or should I suggest a few?", also in its `asked`): dishes named → `add_dish { name, slot, quote }` each, at that slot; "suggest" → `set_slot_day { date, slot, new_dishes_allowed }` on that slot's next days, or `set_setting { new_dishes_per_week }` for more variety everywhere. An add-on (one person's own beside the family's meal) is planned only as often as its dishes are had; its other days have none, which is not a missing meal.
+- **A plan's question** (at most one, also in its `asked`): a meal with no dishes known at all, left out of the week ("I know only a few dishes for Kabir's tiffin. What else do you make for Kabir's tiffin, or should I suggest a few?"), and any calendar entry it could not read ("does "Dinner out" (Ravi, Thu) change who eats at home?") in the same question. Dishes named → `add_dish { name, slot, quote }` each, at the meal they were named for; "suggest" → `set_slot_day { date, slot, new_dishes_allowed }` on that slot's next days, or `set_setting { new_dishes_per_week }` for more variety everywhere. An add-on (one person's own beside the family's meal) is planned only as often as its dishes are had; its other days have none, which is not a missing meal.
 
 ## Amounts and units
 
@@ -103,6 +103,8 @@ The wake gives `which`, `date`, `connected` and `since`. In this order:
   "Fine for 2 weeks" is 14; "Fine, not sure how long" is `in_stock` without `days`. A numbered reply ("1 low, 2 fine for 2 weeks") numbers the items in the order asked: one call with every answer.
 - **To "Yesterday's plan had <dish>..."** (the afternoon reminder's only question about cooking, for a dish new to them):
   `record_feedback { date, slot, dish, made, liked, again }` per dish, from the reminder's `feedback`. No reply: no call.
+- **To a new dish's "OK to try it, or should I swap it?"** (the week's message, "<dish> on Tue": that day of the week) **or "Tomorrow's new dish: ... OK to make it, or swap?"** (the evening's `new_dishes`): `record_feedback { date, slot, dish, answer }` per dish, no `made`. `answer: "ok"`: it becomes theirs; `"swap"`: that meal planned again, nothing new; `"dont_like"`: never suggested again (a day to come planned again). A plain "ok" is every dish asked; send a re-plan's `message` word for word.
+- **To the plan's check question, "Is the <dish> OK for <person>, no <ingredient>?"** (the week's message; a dish not known to fit a person's rule, planned and asked): `record_feedback { date, slot, dish, who, answer }` per dish asked, `who` the person named. `answer: "fits"`: the dish is fine for them (never asked again); `"not_for"`: not for them (they get another dish that day, re-planned; send its `message` word for word). The date is the first day that dish is on the plan. Dishes counted as "<n> more to check on the week page" are answered only when the family names them.
 - **How a dish went, said by them:** `rate_dishes { ratings: [{ dish, rating: "good" | "okay" | "didnt_work", note, said_by }] }`.
   Never ask whether the plan was cooked: a plan is a suggestion.
 - **"Add dal":** `set_cart_line { item, qty }`. **"Got atta at the kirana":** `record_bought_outside`. **"Don't ask about

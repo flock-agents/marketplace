@@ -360,6 +360,11 @@ describe("cookVisitsText", () => {
     expect(cookVisitsText([{ at: "07:30" }])).toBe("comes at 7:30 am");
     expect(cookVisitsText([{ at: "06:00", meals: ["Breakfast", "Lunch"] }, { at: "16:30", meals: ["Dinner"] }])).toBe("comes at 6 am (Breakfast, Lunch) and 4:30 pm (Dinner)");
   });
+  it("says a visit with no clock time by its meals (a cook setup saved from \"morning\" and \"afternoon\", F5)", () => {
+    expect(cookVisitsText([], [["Breakfast", "Lunch"], ["Dinner"]])).toBe("comes for Breakfast, Lunch and for Dinner");
+    expect(cookVisitsText([{ at: "07:00", meals: ["Breakfast"] }], [["Dinner"]])).toBe("comes at 7 am (Breakfast) and for Dinner");
+    expect(cookVisitsText([], [])).toBeNull();
+  });
 });
 
 describe("the Week page's week", () => {

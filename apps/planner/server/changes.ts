@@ -10,7 +10,8 @@
 //   set_rule        { id?, hard?, what?, who?, slots?, days?, items?, to?, frequency?, per_meal?, fasting_food?, quote?, remove? }
 //   set_setting     { new_dishes_per_week }
 //   record_made     { date, slot, dishes }
-//   record_feedback { date, slot, dish, made, liked?, again? }
+//   record_feedback { date, slot, dish, made, liked?, again? }, or before it is cooked { date, slot, dish, answer: ok | swap | dont_like },
+//                   or to the plan's check question { date, slot, dish, who, answer: fits | not_for }
 import type { Context, Hono } from "hono";
 import { asc, eq, gte } from "drizzle-orm";
 import { people as people_t, slot_dishes, slot_days } from "./db/schema";
@@ -22,7 +23,8 @@ import { isObject, name, names, refuse, weekdays, words, writeRoutes, type Db, t
 import type { ModelCall } from "./model";
 import { INGREDIENT_SCHEMA, INGREDIENT_SYSTEM, ingredientsFrom, makePlan, OP_BUDGET_MS, type MakePlanResult } from "./makePlan";
 import { platformPeers, ruleHolds, type PlanDay } from "./planDays";
-import { canonTag, checkSlot, forbidden, notFor, ruleTags, slotFacts, type Week } from "./planChecks";
+import { resolveGives, resolveTarget, targetsFor } from "./targets";
+import { canonTag, checkSlot, forbidden, notFor, readFor, ruleTags, slotFacts, type Week } from "./planChecks";
 import { containsRead, frequencyOf } from "./setup";
 import { addRule, commit, getLibraryDish, getSlot, getSlotDay, listLibrary, listRules, listSlotDays, listSlots, newDishesPerWeek, recent, removeRule,
   removeSlot, saveSlotDay, slotHistory, updateLibraryByName, updateRule, upsertLibrary, upsertSlot, type Guest, type Rule, type RuleInput, type Slot,
@@ -38,8 +40,8 @@ const CONTAINS_BUDGET_MS = 90_000;
 export type ChangeDeps = { db: Db; emit: Emit; model: ModelCall; basePath: string; now: () => Date; platform?: () => unknown;
   sqlite?: { query: (q: string) => { get: () => unknown } }; log?: (line: string) => void };
 type Target = { date: string; slot: string };
-/** What a re-plan answers beside the change: the slot-days planned again, the message to send, or why it could not. */
-export type Replanned = { replanned: Target[]; message?: string; unmet?: string[]; planned?: false; say?: string };
+/** What a re-plan answers beside the change: the slot-days planned again, the message to send, its check question (asked), or why it could not. */
+export type Replanned = { replanned: Target[]; message?: string; unmet?: string[]; asked?: string[]; planned?: false; say?: string };
 
 // ── Re-planning only what a change touches ──
 
@@ -57,7 +59,7 @@ export async function replan(deps: ChangeDeps, targets: Target[]): Promise<Repla
   if (!list.length) return { replanned: [] };
   const today = todayStr(deps.now());
   const out: Replanned = { replanned: [] };
-  const messages: string[] = [], unmet: string[] = [];
+  const messages: string[] = [], unmet: string[] = [], asked: string[] = [];
   for (const week of uniq(list.map((t) => mondayOf(t.date))).sort()) {
     const only = list.filter((t) => mondayOf(t.date) === week);
     const r: MakePlanResult = await makePlan({ db: deps.db, emit: deps.emit, model: deps.model, weekStart: week, today, basePath: deps.basePath,
@@ -66,8 +68,9 @@ export async function replan(deps: ChangeDeps, targets: Target[]): Promise<Repla
     out.replanned.push(...only);
     messages.push(r.message);
     unmet.push(...(r.unmet ?? []));
+    asked.push(...(r.asked ?? []));
   }
-  return { ...out, message: messages.join("\n\n"), ...(unmet.length ? { unmet: uniq(unmet) } : {}) };
+  return { ...out, message: messages.join("\n\n"), ...(unmet.length ? { unmet: uniq(unmet) } : {}), ...(asked.length ? { asked } : {}) };
 }
 
 // ── What was sent, checked ──
@@ -113,7 +116,7 @@ function dishesOf(v: unknown, what: string): (SlotDishInput & { given: boolean }
 async function fillIngredients(deps: ChangeDeps, date: string, slot: string, count: number, dishes: (SlotDishInput & { given: boolean })[]): Promise<void> {
   const need = dishes.filter((d) => !d.given);
   if (!need.length) return;
-  const r = await deps.model({ tier: "fast", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 2000,
+  const r = await deps.model({ tier: "balanced", purpose: "meal plan: a day's ingredients", system: INGREDIENT_SYSTEM, schema: INGREDIENT_SCHEMA, maxTokens: 2000,
     user: JSON.stringify({ date, day: weekdayOf(date), dishes: need.map((d) => ({ slot, name: d.dish, people: Math.max(1, count) })) }) });
   if (!r.ok) return;
   for (const x of ingredientsFrom(r.json)) {
@@ -162,7 +165,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
     const saved = listSlotDays(db, { from: week, to: addDays(week, 6) });
     const days: PlanDay[] = saved.map((d) => ({ date: d.date!, slot: d.slot, people: d.people, guests: d.guests, occasion: d.occasion, new_dishes_allowed: d.new_dishes_allowed,
       skip: d.skip, edited: d.edited, fixed: !replannable(d, today), why: [], fasting: [], dishes: d.dishes.map((x) => x.dish), note: d.note }));
-    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newBudget: newDishesPerWeek(db), newDishes: new Map() };
+    const w: Week = { days, slots: new Map(), rules, library, facts: new Map(), done: new Set(), newDishes: new Map() };
     for (const s of slots) {
       const history = slotHistory(db, s.name, week);
       w.slots.set(s.name.toLowerCase(), slotFacts(s, library, history, recent(history, week, 3)));
@@ -186,7 +189,7 @@ export function failingSlotDays(db: Db, today: string): Target[] {
 function fastingSlotDays(db: Db, today: string, r: Rule): Target[] {
   if (r.what !== "fasting") return [];
   const slots = listSlots(db, { all: true });
-  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot)
+  return listSlotDays(db, { from: today }).filter((d) => replannable(d, today) && ruleHolds(r, d.date!, slots.find((s) => same(s.name, d.slot)), d.slot, slots)
     && (!r.who || d.people.some((p) => same(p, r.who!)) || getSlot(db, d.slot)?.usual_people.length === 0)).map((d) => ({ date: d.date!, slot: d.slot }));
 }
 
@@ -287,7 +290,9 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     const link = b.link === undefined || b.link === null ? null : typeof b.link === "string" && /^https?:\/\//i.test(b.link.trim()) ? b.link.trim() : refuse("link must be the reel's or recipe's http(s) link");
     if (b.quote !== undefined) words(b.quote, "quote");
     const had = getLibraryDish(db, dish, slot.name);
-    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days,
+    // How often or the days changed: the family's words for them are the quote given, else none (old words would be wrong).
+    const said = frequency === undefined && days === undefined ? undefined : (frequency || days?.length) && typeof b.quote === "string" ? b.quote.trim() || null : null;
+    const row = commit(db, emit, (tx, ch) => upsertLibrary(tx, { name: had?.name ?? dish, slot: slot.name, frequency, days, said,
       // The family's own dish now, not a suggestion; one named in setup keeps its origin.
       ...(had?.origin === "setup_named" ? {} : { origin: "family_added" as const }), suggested: false,
       ...(link ? { video_url: link, ...(had && !had.untried ? {} : { untried: true }) } : had ? {} : { untried: false }) }, by, ch));
@@ -311,9 +316,20 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     if (b.who !== undefined) input.who = b.who === null ? null : personNames(db, [b.who], "who")[0];
     if (b.slots !== undefined) input.slots = b.slots === null ? null : names(b.slots, "slots").map((s) => slotNamed(db, s, "slots").name);
     if (b.days !== undefined) input.days = b.days === null ? null : weekdays(b.days, "days");
-    if (b.items !== undefined) input.items = b.items === null ? null : names(b.items, "items").map(canonTag);
+    if (b.items !== undefined) {
+      const said = b.items === null ? null : names(b.items, "items");
+      input.items = said && said.map(canonTag);
+      // Resolved once, here, as targetsOf would derive them (targets.ts targetsFor): what the rule is about is typed from now on.
+      const what = input.what ?? before?.what;
+      input.targets = said && (what ? targetsFor({ what, items: said }) : said.flatMap((w) => [resolveTarget(w)]));
+    }
     if (b.to !== undefined) input.to = words(b.to, "to");
     if (b.frequency !== undefined) input.frequency = b.frequency === null ? null : frequencyOf(b.frequency) ?? refuse('frequency must be usually, sometimes, rarely or "<n>/week"');
+    // A swap's item: a soft swap with a frequency ("millets sometimes") stays its own kind, so it gives nothing typed.
+    if (b.to !== undefined || b.frequency !== undefined) {
+      const to = input.to ?? before?.to ?? null, freq = input.frequency !== undefined ? input.frequency : before?.frequency ?? null;
+      input.gives = to && !freq ? resolveGives(to) : null;
+    }
     if (b.per_meal !== undefined) input.per_meal = b.per_meal === null ? null : typeof b.per_meal === "number" && Number.isInteger(b.per_meal) && b.per_meal > 0 ? b.per_meal : refuse("per_meal must be a whole number above 0");
     if (b.fasting_food !== undefined) input.fasting_food = b.fasting_food === null ? null : names(b.fasting_food, "fasting_food");
     if (b.quote !== undefined) input.quote = name(b.quote, "quote");
@@ -357,10 +373,23 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     return { body: { ok: true, slot_day: day } };
   });
 
-  // record_feedback: the answer to the next-day question about a dish the family had not eaten before (spec §5.7).
+  // record_feedback: the answer to the next-day question about a dish the family had not eaten before (spec §5.7), or
+  // (`answer`) to "OK to try / make it, or swap?" about a brand-new dish before it is cooked (owner, 25 Nov): ok makes it
+  // theirs; swap plans that slot-day again with nothing new; dont_like marks it disliked and, on a day to come, plans that
+  // slot-day again too.
   write("/api/slot-days/feedback", async (b, by) => {
     const date = dateOf(b.date, "date");
     const dishName = name(b.dish, "dish");
+    if (b.answer !== undefined) {
+      if (b.made !== undefined || b.liked !== undefined || b.again !== undefined) refuse("send answer (before it is cooked) or made (after), not both");
+      if ((CHECK_ANSWERS as readonly unknown[]).includes(b.answer)) {
+        if (typeof b.who !== "string" || !b.who.trim()) refuse("who is required with answer fits or not_for");
+        return checkAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", personNames(db, [b.who], "who")[0], b.answer as CheckAnswer, by);
+      }
+      if (!(NEW_DISH_ANSWERS as readonly unknown[]).includes(b.answer)) refuse(`answer must be one of: ${[...NEW_DISH_ANSWERS, ...CHECK_ANSWERS].join(", ")}`);
+      return newDishAnswer(date, dishName, typeof b.slot === "string" ? b.slot : "", b.answer as NewDishAnswer, by);
+    }
+    if (b.made === undefined) refuse("made or answer is needed: made (true or false) after the day, answer (ok, swap, dont_like) before it is cooked");
     const made = flag(b.made, "made");
     const liked = b.liked === undefined || b.liked === null ? null : flag(b.liked, "liked");
     const again = b.again === undefined || b.again === null ? null : flag(b.again, "again");
@@ -387,4 +416,58 @@ export function mountChangeRoutes(hono: Hono<any>, deps: Omit<ChangeDeps, "now">
     });
     return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }) } };
   });
+
+  /** The answer to the plan's check question, "Is the Kadhi OK for Gowri Shankar, no egg?" (spec §9.1), saved as the dish's read
+   *  for the person's hard rules' ingredient tags it was not read for (T), so it is never asked again for them: fits, the dish
+   *  is read as without T; not_for, read as having T, and that slot-day planned again (the person gets an item they can eat). */
+  async function checkAnswer(date: string, dishName: string, slotName: string, who: string, answer: CheckAnswer, by: string) {
+    const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
+    const day = onDay.find((x) => !slotName || same(x.slot, slotName)) ?? onDay[0];
+    if (!day) return { status: 404 as const, body: { reason: `${dishName} was not on the plan on ${date}` } };
+    const row = getLibraryDish(db, dishName, day.slot) ?? listLibrary(db, { names: [dishName] })[0];
+    if (!row) return { status: 404 as const, body: { reason: `${dishName} is not in the library` } };
+    const read = new Set(row.contains_read.map(canonTag));
+    const tags = uniq(listRules(db).filter((r) => r.hard && (!r.who || same(r.who, who))).flatMap(forbidden)).filter((t) => !readFor(read, t));
+    const again = answer === "not_for" && date >= today() && day.status !== "confirmed";
+    commit(db, emit, (tx, ch) => {
+      if (!tags.length) return;
+      upsertLibrary(tx, answer === "fits"
+        ? { name: row.name, slot: row.slot, contains_read: uniq([...row.contains_read, ...tags]), contains: row.contains.filter((t) => !tags.includes(canonTag(t))) }
+        : { name: row.name, slot: row.slot, contains_read: uniq([...row.contains_read, ...tags]), contains: uniq([...row.contains, ...tags]) }, by, ch);
+    });
+    const r = again ? await replan(d, [{ date, slot: day.slot }]) : { replanned: [] };
+    return { body: { ok: true, dish: row.name, who, outcome: answer, tags, library: listLibrary(db, { names: [row.name] }), ...r } };
+  }
+
+  /** The answer to "OK to try it, or should I swap it?" (the week's message) or "OK to make it, or swap?" (the evening before). */
+  async function newDishAnswer(date: string, dishName: string, slotName: string, answer: NewDishAnswer, by: string) {
+    const onDay = listSlotDays(db, { from: date, to: date }).filter((x) => x.dishes.some((y) => dishKey(y.dish) === dishKey(dishName)));
+    const day = onDay.find((x) => !slotName || same(x.slot, slotName)) ?? onDay[0];
+    if (!day) return { status: 404 as const, body: { reason: `${dishName} was not on the plan on ${date}` } };
+    const placed = day.dishes.find((y) => dishKey(y.dish) === dishKey(dishName))!;
+    if (!listLibrary(db, { names: [dishName] }).length) return { status: 404 as const, body: { reason: `${dishName} is not in the library` } };
+    const again = answer === "swap" || (answer === "dont_like" && date >= today());
+    if (answer === "swap" && date < today()) refuse(`${date} has passed: a dish already cooked or not is answered with made`);
+    if (again && day.status === "confirmed") return { status: 409 as const, body: { reason: `${day.slot} on ${date} is already recorded as made` } };
+    commit(db, emit, (tx, ch) => {
+      if (answer === "ok") updateLibraryByName(tx, dishName, { untried: 0, suggested: 0 }, by, ch);
+      if (answer === "dont_like") updateLibraryByName(tx, dishName, { disliked: 1 }, by, ch);
+      if (answer !== "swap") {
+        tx.update(slot_dishes).set({ feedback_asked: FEEDBACK_ANSWERED, updated_at: new Date().toISOString(), updated_by: by }).where(eq(slot_dishes.id, placed.id)).run();
+        ch.push(["slot_dishes", placed.id, "update", by]);
+      }
+      // Planned again with nothing new that day (set_slot_day's new_dishes_allowed 0), kept as the family's change.
+      if (again) saveSlotDay(tx, { date, slot: day.slot, new_dishes_allowed: 0, edited: true }, by, ch);
+    });
+    const r = again ? await replan(d, [{ date, slot: day.slot }]) : { replanned: [] };
+    const outcome = answer === "ok" ? "accepted" : answer === "swap" ? "swapped" : "disliked";
+    return { body: { ok: true, dish: dishName, outcome, library: listLibrary(db, { names: [dishName] }), ...r } };
+  }
 }
+
+/** The answers to the question about a brand-new dish before it is cooked. */
+export const NEW_DISH_ANSWERS = ["ok", "swap", "dont_like"] as const;
+type NewDishAnswer = (typeof NEW_DISH_ANSWERS)[number];
+/** The answers to the plan's check question about a dish and a person's rule ("Is the Kadhi OK for Gowri Shankar, no egg?"). */
+export const CHECK_ANSWERS = ["fits", "not_for"] as const;
+type CheckAnswer = (typeof CHECK_ANSWERS)[number];

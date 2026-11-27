@@ -1,0 +1,173 @@
+// What a rule is about (docs/2026-11-26-one-meaning-model-design.md §5.2): exactly one target. One of the three places that match a
+// family's words to the catalog (with kinds.ts and the interview's resolver): a rule's words are resolved here once, when the rule
+// is written, and read back typed everywhere else. Pure: no db.
+import { BASE_TAGS, TAG_PARENT } from "./db/constants";
+import { bareDish, bareWord, catalogItem, CATALOG, matchDish, norm } from "./kinds";
+import type { Rule } from "./slotStore";
+
+export type RuleTarget =
+  | { type: "kind"; kind: string }
+  | { type: "sub"; kind: string; sub: string }
+  | { type: "item"; item: string; kind: string | null }
+  | { type: "ingredient"; tag: string };
+
+const canon = (t: string): string => t.trim().toLowerCase().replace(/^@/, "").replace(/[\s-]+/g, "_");
+const TAGS = new Set<string>([...BASE_TAGS, ...Object.keys(TAG_PARENT), ...Object.values(TAG_PARENT), ...CATALOG.tags.map(canon)]);
+
+/** The known tag a word is ("eggs" → egg), else null. */
+function tagOf(word: string): string | null {
+  const c = canon(word);
+  if (TAGS.has(c)) return c;
+  return c.endsWith("s") && c.length > 3 && TAGS.has(c.slice(0, -1)) ? c.slice(0, -1) : null;
+}
+
+/** A word the catalog's ingredient lists name, with its own spelling ("curd", "paneer", "peanuts"): an ingredient even where a dish
+ *  or sub-kind carries the same word (Curd, Gravy/Paneer), so "no curd" blocks every dish with curd, not the one dish. */
+const SYNONYMS: Record<string, string> = { shrimp: "prawn", shrimps: "prawn", prawns: "prawn" };
+let vocab: Map<string, string> | null = null;
+function ingredientOf(word: string, keepKind = false): string | null {
+  if (!vocab) {
+    vocab = new Map();
+    for (const k of CATALOG.kinds) for (const it of k.items) for (const i of it.ingredients) vocab.set(norm(i.name), canon(i.name));
+  }
+  const n = norm(word);
+  if (SYNONYMS[n]) return SYNONYMS[n];
+  const hit = vocab.get(n) ?? (n.endsWith("s") && n.length > 3 ? vocab.get(n.slice(0, -1)) : undefined);
+  // A word that is also a whole kind of dish ("poha", "rajma") stays that kind: the rule is about the dish.
+  return hit && (keepKind || matchDish(word)?.by !== "kind") ? catalogTagOf(hit) ?? hit : null;
+}
+/** The catalog's tag an ingredient is (J9, decided D1): the one tag the catalog gives that ingredient, when the tag's own name
+ *  holds the ingredient's word ("rice": white_rice, so idli rice, rice flour and poha are rice too). Null when the catalog gives
+ *  it no tag, or a wider one it is only part of ("curd": dairy, "maida": wheat, "onion": onion_garlic and root_veg), so "no curd"
+ *  stays curd. */
+function catalogTagOf(ingredient: string): string | null {
+  const tags = (CATALOG.ingredients?.[norm(ingredient.replace(/_/g, " "))] ?? []).map(canon);
+  return tags.length === 1 && tags[0].split("_").includes(canon(ingredient)) ? tags[0] : null;
+}
+
+/** The words of a family's sentence that name a food the catalog places (J4): a known tag, an ingredient of its lists, a kind, sub-kind
+ *  or item, or a word of a main ingredient's name ("ragi", of "ragi flour"). Whole words, in the order said, plain. Structure only: a
+ *  word the catalog does not know is not a food here. */
+let mainWords: Set<string> | null = null;
+export function foodWordsIn(text: string): string[] {
+  if (!mainWords) {
+    mainWords = new Set();
+    for (const k of CATALOG.kinds) for (const it of k.items) for (const i of it.ingredients) if (i.main) for (const w of norm(i.name).split(" ")) if (w.length > 2) mainWords.add(w);
+  }
+  const ws = norm(text).split(" ").filter(Boolean);
+  const out: string[] = [];
+  for (const w of ws) {
+    const one = w.endsWith("s") && w.length > 3 ? w.slice(0, -1) : w;
+    if (tagOf(w) || ingredientOf(w, true) || matchDish(w) || mainWords.has(w) || mainWords.has(one)) if (!out.includes(w)) out.push(w);
+  }
+  return out;
+}
+
+/** A rule word to its one target: a known tag (BASE_TAGS, TAG_PARENT keys/values, catalog tags, singular of a plural) → ingredient;
+ *  else matchDish: item → item, sub → sub, kind → kind; else an ingredient of that word (canonTag). */
+export function resolveTarget(word: string): RuleTarget {
+  const tag = tagOf(word);
+  if (tag) return { type: "ingredient", tag };
+  const ing = ingredientOf(word);
+  if (ing) return { type: "ingredient", tag: ing };
+  const m = matchDish(word);
+  if (m?.by === "item" && m.item) return { type: "item", item: m.item, kind: m.kind };
+  if (m?.by === "sub" && m.sub) return { type: "sub", kind: m.kind, sub: m.sub };
+  if (m) return { type: "kind", kind: m.kind };
+  return { type: "ingredient", tag: canon(word) };
+}
+
+/** The dishes a family word names (H7, controller ruling): a word that is one item's other name and also a word of another item
+ *  of its kind ("uthappam": Plain uttapam's, and Onion uttapam's "vengaya uthappam") names that family: every item of the kind
+ *  whose names hold the word or one of that item's own names the family shares ("uttapam"), with the item itself. Null for a
+ *  word naming one dish. */
+function familyOf(word: string, t: Extract<RuleTarget, { type: "item" }>): RuleTarget[] | null {
+  const k = t.kind ? CATALOG.kinds.find((x) => norm(x.name) === norm(t.kind!)) : null;
+  const own = k?.items.find((it) => norm(it.name) === norm(t.item));
+  if (!k || !own) return null;
+  const ws = (s: string) => ` ${norm(s).split(" ").map((w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w)).join(" ")} `;
+  const holds = (it: (typeof k.items)[number], w: string) => [it.name, ...(it.aka ?? [])].some((n) => ws(n).includes(ws(w)));
+  const others = k.items.filter((it) => it !== own && holds(it, word));
+  if (!others.length) return null;
+  // The item's own names that its family shares, so every spelling counts ("uttapam" beside "uthappam"); never a name the family
+  // does not share ("dosai", Plain dosa's, beside "dose").
+  const names = [word, ...[own.name, ...(own.aka ?? [])].filter((n) => others.some((it) => holds(it, n)))];
+  return k.items.filter((it) => it === own || names.some((w) => holds(it, w))).map((it) => ({ type: "item", item: it.name, kind: k.name }));
+}
+
+/** A rule word to all its targets, for an exclusion (doublesFor): resolveTarget's; for a word naming a family of dishes, every dish
+ *  of it (familyOf); for a kind word the catalog's ingredient lists also name ("rice"), the ingredient tag too, so a dish saved as
+ *  another kind that lists it (Curd rice, kind Curd) is hit through its facts. */
+export function resolveTargets(word: string): RuleTarget[] {
+  const one = resolveTarget(word);
+  if (one.type === "item") return familyOf(word, one) ?? [one];
+  if (one.type !== "kind") return [one];
+  const tag = ingredientOf(word, true);
+  return tag ? [one, { type: "ingredient", tag }] : [one];
+}
+
+const sentence = (w: string): string => { const s = w.trim().replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+/** A swap's `to`: as resolveTarget, except a kind or sub word whose bareDish exists gives that item; a word the catalog does not know
+ *  is the family's own item (kind null). Never an ingredient. */
+export function resolveGives(word: string): Exclude<RuleTarget, { type: "ingredient" }> {
+  const m = matchDish(word);
+  if (m?.by === "item" && m.item) return { type: "item", item: m.item, kind: m.kind };
+  if (m) {
+    // A kind or sub-kind word whose bare dish is decided gives that item (spec §5.1); one without stays a kind or sub. A word
+    // another item holds names that family, never the bare dish (H7: "saaru"), as setup reads it.
+    const bare = bareWord(m.kind, word) ? bareDish(m.kind, m.sub) : null;
+    if (bare) return { type: "item", item: bare, kind: catalogItem(bare)?.kind.name ?? m.kind };
+    return m.sub ? { type: "sub", kind: m.kind, sub: m.sub } : { type: "kind", kind: m.kind };
+  }
+  return { type: "item", item: sentence(word), kind: null };
+}
+
+/** Does a rule's word also target its ingredient ("no rice": the Rice kind and rice): the exclusions only. A swap, only or require
+ *  rule keeps the one target (§5.2: a swap targets the swapped part). */
+export const doublesFor = (what: string): boolean => what === "avoid" || what === "veg" || what === "no_eggs" || what === "egg";
+
+/** The targets a rule has from its what and words (veg → meat, fish + items; no_eggs → egg + items; egg → items or meat, fish). */
+export function targetsFor(r: { what: string; items: string[] | null }): RuleTarget[] {
+  const items = (r.items ?? []).flatMap(doublesFor(r.what) ? resolveTargets : (w: string) => [resolveTarget(w)]);
+  const ing = (...tags: string[]): RuleTarget[] => tags.map((tag) => ({ type: "ingredient", tag }));
+  const out = r.what === "veg" ? [...ing("meat", "fish"), ...items]
+    : r.what === "no_eggs" ? [...ing("egg"), ...items]
+    : r.what === "egg" ? (items.length ? items : ing("meat", "fish"))
+    : items;
+  const seen = new Set<string>();
+  return out.filter((t) => { const k = JSON.stringify(t); return seen.has(k) ? false : (seen.add(k), true); });
+}
+
+/** A rule's targets as saved, else derived (targetsFor). A rule saved before J9 with an ingredient the catalog has a tag for
+ *  ("rice") reads as that tag (white_rice). */
+export function targetsOf(r: Pick<Rule, "what" | "items" | "targets">): RuleTarget[] {
+  if (!r.targets) return targetsFor(r);
+  if (!r.targets.some((t) => t.type === "ingredient" && catalogTagOf(t.tag))) return r.targets;
+  const seen = new Set<string>();
+  return r.targets.map((t): RuleTarget => (t.type === "ingredient" ? { type: "ingredient", tag: catalogTagOf(t.tag) ?? t.tag } : t))
+    .filter((t) => { const k = JSON.stringify(t); return seen.has(k) ? false : (seen.add(k), true); });
+}
+
+export type DishPlace = { kind: string | null; sub: string | null; item: string | null };
+
+/** true/false for a kind, sub or item target against a dish's saved place; null for an ingredient target (facts decide). */
+export function hitsTarget(t: RuleTarget, p: DishPlace): boolean | null {
+  const same = (a: string | null, b: string | null): boolean => !!a && !!b && norm(a) === norm(b);
+  switch (t.type) {
+    case "kind": return same(t.kind, p.kind);
+    case "sub": return same(t.kind, p.kind) && same(t.sub, p.sub);
+    case "item": return same(t.item, p.item);
+    default: return null;
+  }
+}
+
+/** The target in the family's words for read-back and questions: "egg", "salad", "upma", "Pancakes". */
+export function targetText(t: RuleTarget): string {
+  switch (t.type) {
+    case "kind": return t.kind.toLowerCase();
+    case "sub": return t.sub.toLowerCase();
+    case "item": return t.item;
+    default: return t.tag.replace(/_/g, " ");
+  }
+}
