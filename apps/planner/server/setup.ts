@@ -198,10 +198,10 @@ const systemOf = (part: string, example: string) => `${COMMON}\n\n${part}\n\n${E
  *  `tier`: the dishes read copies the family's words out, so it reads on fast (no reasoning): on balanced its reasoning ran into
  *  the token cap and cut the JSON off, twice in some setups (eval 2026-11-25: 3–11 s on fast vs 18–146 s, 94% vs 78% overall). */
 export const SETUP_PARTS = [
-  { id: "home", tier: "balanced", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
+  { id: "home", tier: "best", purpose: "setup: the home", system: systemOf(HOME_PART, HOME_EXAMPLE), schema: HOME_SCHEMA, maxTokens: 6000, need: true },
   { id: "rules", tier: "balanced", purpose: "setup: the food rules", system: systemOf(RULES_PART, RULES_EXAMPLE), schema: RULES_SCHEMA, maxTokens: 6000, need: true },
-  { id: "dishes", tier: "fast", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
-  { id: "often", tier: "balanced", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
+  { id: "dishes", tier: "best", purpose: "setup: the dishes", system: systemOf(DISHES_PART, DISHES_EXAMPLE), schema: DISHES_SCHEMA, maxTokens: 8000, need: false },
+  { id: "often", tier: "best", purpose: "setup: how often each dish", system: systemOf(OFTEN_PART, OFTEN_EXAMPLE), schema: OFTEN_SCHEMA, maxTokens: 6000, need: false },
 ] as const;
 
 export const CONTAINS_SYSTEM = `For each dish, say for each tag whether the dish as usually cooked in an Indian home has it: true or false, for every tag asked, for every dish. Answer as { "<dish name as given>": { "<tag>": true | false } }.
@@ -1144,7 +1144,7 @@ export async function containsRead(model: ModelCall, ask: Map<string, { name: st
   for (let i = 0; i < items.length; i += CONTAINS_BATCH) batches.push(items.slice(i, i + CONTAINS_BATCH));
   await Promise.all(batches.map(async (b, i) => {
     const tags = [...new Set(b.flatMap((d) => [...d.tags]))].sort();
-    const r = await askOnce(model, { tier: "fast", purpose: `setup: contains ${i + 1}/${batches.length}`, system: CONTAINS_SYSTEM,
+    const r = await askOnce(model, { tier: "balanced", purpose: `setup: contains ${i + 1}/${batches.length}`, system: CONTAINS_SYSTEM,
       user: JSON.stringify({ dishes: b.map((d) => d.name), tags }), schema: CONTAINS_SCHEMA, maxTokens: 4000 }, until, log);
     if (!r.ok || !isObject(r.json)) { log(`contains ${i + 1}: ${r.ok ? "no answer" : `${r.code}: ${r.message.slice(0, 200)}`}`); return; }
     const byKey = new Map(Object.entries(r.json).map(([k, v]) => [dishKey(k), v]));
@@ -1747,7 +1747,7 @@ export async function kindsRead(model: ModelCall, asks: KindsAsk[], until: numbe
     const regional = regionalLines(these.map((a) => a.name));
     const user = JSON.stringify({ catalog: catalogLines(), dishes: these.map((a) => ({ name: a.name, meal: a.meal, words: a.words,
       ...(a.known ? { known: [a.known.kind, a.known.sub].filter(Boolean).join(" / ") } : {}) })), ...(regional.length ? { regional, family_dishes: family } : {}) });
-    const r = await askOnce(model, { tier: "fast", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, by, log);
+    const r = await askOnce(model, { tier: "balanced", purpose: "setup: kinds", system: KINDS_SYSTEM, user, schema: KINDS_SCHEMA, maxTokens: 4000 }, by, log);
     // No dishes list at all is no answer (a failed read), not one that left every dish out.
     if (!r.ok || !isObject(r.json) || !Array.isArray(r.json.dishes)) { log(`kinds: ${r.ok ? "no answer" : `${r.code}: ${r.message.slice(0, 200)}`}`); return null; }
     const rows = r.json.dishes.filter(isObject);

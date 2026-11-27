@@ -88,10 +88,10 @@ export type CallRow = { purpose: string; tier: string; ms: number; ok: boolean; 
 
 /** The app's ModelCall as Flock gives it, over OpenRouter: `upstream` per tier, temperature 0.4, the schema in the system
  *  prompt, one retry on an answer that is not JSON or does not fit. Every call is logged to `sink`. */
-export function appModel(o: { upstream: { balanced: string; fast: string }; noThink?: boolean; prodTiers?: boolean; retier?: (req: ModelRequest) => ModelRequest; sink?: { push: (row: CallRow) => unknown }; onFail?: (req: ModelRequest, r: Extract<ModelResult, { ok: false }>) => void }) {
+export function appModel(o: { upstream: { balanced: string; fast: string; best?: string }; noThink?: boolean; prodTiers?: boolean; retier?: (req: ModelRequest) => ModelRequest; sink?: { push: (row: CallRow) => unknown }; onFail?: (req: ModelRequest, r: Extract<ModelResult, { ok: false }>) => void }) {
   return async (req0: ModelRequest): Promise<ModelResult> => {
     const req = o.retier ? o.retier(req0) : req0;
-    const t0 = Date.now(), upstream = o.upstream[req.tier];
+    const t0 = Date.now(), upstream = (req.tier === "best" ? o.upstream.best : o.upstream[req.tier]) ?? o.upstream.balanced;
     // As Flock's own routes run them: balanced thinks a little (reasoning low), fast does not think.
     const reasoning = o.prodTiers ? (req.tier === "fast" ? { enabled: false } : { effort: "low" }) : undefined;
     const system = req.schema ? `${req.system}\n\nOutput ONLY one JSON value matching this JSON Schema: no prose, no code fence.\n${JSON.stringify(req.schema)}` : req.system;

@@ -28,6 +28,8 @@ const HH = pick(arg("only"), { heldout: HELD, heldout2: HELD2 });
 const REPEAT = Number(arg("repeat") ?? 1);
 const MODEL = arg("model") ?? DEFAULT_UPSTREAM;
 const PERSONA = arg("persona-model") ?? DEFAULT_UPSTREAM;
+/** Flock's best tier upstream (owner, 27 Nov: OpenAI Sol). */
+const BEST = arg("best-model") ?? "openai/gpt-6.2-sol";
 const REUSE = arg("reuse-transcripts");
 const CONC = Number(arg("concurrency") ?? 4);
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
@@ -39,7 +41,7 @@ if (!flag("verbose")) console.log = (...a: unknown[]) => { if (!String(a[0] ?? "
 const FAST_READS = (arg("fast-reads") ?? "").split(",").filter(Boolean);
 const retier = FAST_READS.length ? (r: any) => (FAST_READS.some((id) => r.purpose === READ_PURPOSE[id]) ? { ...r, tier: "fast" } : r) : undefined;
 const READ_PURPOSE: Record<string, string> = { home: "setup: the home", rules: "setup: the food rules", dishes: "setup: the dishes", often: "setup: how often each dish" };
-const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL }, noThink: flag("no-think"), prodTiers: flag("prod-tiers"), retier, sink });
+const model = (sink: CallRow[]) => appModel({ upstream: { balanced: MODEL, fast: MODEL, best: BEST }, noThink: flag("no-think"), prodTiers: flag("prod-tiers"), retier, sink });
 
 if (flag("self-test")) {
   let bad = 0;

@@ -113,7 +113,7 @@ const lib = (k: Awaited<ReturnType<typeof boot>>) => Object.fromEntries(k.rows("
   { frequency: d.frequency, days: d.days ? JSON.parse(d.days) : null, contains: JSON.parse(d.contains), read: JSON.parse(d.contains_read), origin: d.origin }]));
 
 describe("apply_setup v2: the model reads, code checks and writes", () => {
-  it("four reads at once (the dishes on fast, the rest balanced), then contains on the fast tier; everything written in order and read back", async () => {
+  it("four reads at once (home, dishes and how often on best, rules balanced), then contains on balanced; everything written in order and read back", async () => {
     const f = fake();
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: HOUSEHOLD, transcript: TRANSCRIPT });
@@ -121,14 +121,14 @@ describe("apply_setup v2: the model reads, code checks and writes", () => {
     expect(f.of("home").length + f.of("rules").length + f.of("dishes").length + f.of("often").length).toBe(4);
     for (const p of ["home", "rules", "dishes", "often"] as Part[]) {
       const a = f.of(p)[0];
-      expect(a.tier).toBe(p === "dishes" ? "fast" : "balanced");
+      expect(a.tier).toBe(p === "rules" ? "balanced" : "best");
       expect(JSON.parse(a.user).household).toEqual(HOUSEHOLD);
       expect(JSON.parse(a.user).transcript).toContain("A2: actually Rani comes at 8:15");
     }
-    // Contains: fast, every rule's tag and the base tags.
+    // Contains: balanced, every rule's tag and the base tags.
     const c = f.of("contains");
     expect(c).toHaveLength(1);
-    expect(c[0].tier).toBe("fast");
+    expect(c[0].tier).toBe("balanced");
     expect(JSON.parse(c[0].user).tags).toEqual(expect.arrayContaining(["sugar", "nuts", "white_rice", "egg", "meat", "fish", "onion_garlic", "dairy"]));
 
     // People: names only, from the household.
@@ -998,11 +998,11 @@ describe("apply_setup: the kinds model, end to end with a fake model", () => {
     const k = await boot({ model: f.model });
     const r = await k.op("apply_setup", { household: FAMILY, transcript: T });
     expect(r.ok).toBe(true);
-    // One kinds read, on fast, with the catalog, of only what code could not settle: two dishes the catalog does not hold. A bare
+    // One kinds read, on balanced, with the catalog, of only what code could not settle: two dishes the catalog does not hold. A bare
     // "khichdi" is the catalog's decided dish (§5.1, Moong dal khichdi): nothing to ask.
     const asked = f.of("kinds");
     expect(asked).toHaveLength(1);
-    expect(asked[0].tier).toBe("fast");
+    expect(asked[0].tier).toBe("balanced");
     const user = JSON.parse(asked[0].user);
     expect(user.dishes.map((d: any) => d.name).sort()).toEqual(["Boiled chicken", "Kovakkai"]);
     expect(user.catalog.some((l: string) => l.startsWith("Sabzi [") && l.includes("Poriyal/Thoran"))).toBe(true);

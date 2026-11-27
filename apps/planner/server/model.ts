@@ -3,7 +3,7 @@
 // test hands in a fake and the wiring to the SDK is the one line in sdkModel.
 
 /** What the app asks. `tier`: "fast" for cheap, many-times work (a day's ingredients), "balanced" for the week's menu. */
-export type ModelRequest = { system: string; user: string; schema?: object; tier: "fast" | "balanced"; maxTokens?: number; purpose?: string };
+export type ModelRequest = { system: string; user: string; schema?: object; tier: "fast" | "balanced" | "best"; maxTokens?: number; purpose?: string };
 /** A stop that is the family's to fix (no credits, the day's budget spent, too many calls): never tried again in a run. */
 export const STOP_CODES = ["not_declared", "daily_budget", "out_of_credits", "rate_limited", "bad_request"] as const;
 /** bad_request: Flock refused the request's shape (a bug here, never tried again). Flock's daily cap comes as rate_limited. */

@@ -42,6 +42,8 @@ export const SETUP_MAX_MS = 150_000, PLAN_MAX_MS = 300_000;
 const REPEAT = Number(arg("repeat") ?? 3);
 const CONC = Number(arg("concurrency") ?? 4);
 const MODEL = arg("model") ?? DEFAULT_UPSTREAM;
+/** Flock's best tier upstream (owner, 27 Nov: OpenAI Sol). */
+const BEST = arg("best-model") ?? "openai/gpt-6.2-sol";
 const TR = arg("transcripts") ?? join(import.meta.dir, "results", "setup-tuned-fresh");
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
 const OUT = arg("out") ?? join(import.meta.dir, "results", `e2e-${stamp}`);
@@ -68,7 +70,7 @@ async function runOne(h: Household, rep: number) {
   const dataDir = mkdtempSync(join(tmpdir(), "planner-e2e-"));
   try {
     // As Flock runs it: balanced reasons a little, fast does not.
-    const k = await bootPlanner({ dataDir, model: appModel({ upstream: { balanced: MODEL, fast: MODEL }, prodTiers: true, sink: calls }) });
+    const k = await bootPlanner({ dataDir, model: appModel({ upstream: { balanced: MODEL, fast: MODEL, best: BEST }, prodTiers: true, sink: calls }) });
     const t0 = Date.now();
     const { res: sres, setup } = await runSetup(k, h, tr.lines);
     const setup_ms = Date.now() - t0;
