@@ -171,19 +171,21 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       const setup = await flockImport("family/whatsapp-setup");
       // Connected is not linked: with no code typed (link-status says linked: false), no family list can be saved.
       expect(setup.whatsappLinked(ownerPersonId())).toBe(false);
-      expect(await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] })).toMatchObject({ ok: false });
+      expect(await setup.finishWhatsAppSetup(accountId, { family: [FAMILY_CHAT] })).toMatchObject({ ok: false });
       // No WhatsApp account here: the connector's "linked: true" answer is stood in, through the gate's own hook.
       const gate = await flockImport("whatsapp-connector/gate");
       gate.afterWhatsAppCall({ skillId: SKILL, functionName: "link-status", agentId: PA, params: {}, preferredAccountId: accountId },
         { success: true, result: { linked: true, link: { phase: "linked" }, chats: 0 }, duration_ms: 0 });
       expect(setup.whatsappLinked(ownerPersonId())).toBe(true);
-      const done = await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] });
+      // Kept per WhatsApp account (one per number): the family list is this account's.
+      const done = await setup.finishWhatsAppSetup(accountId, { family: [FAMILY_CHAT] });
       expect(done).toEqual({ ok: true, family: [FAMILY_CHAT] });
       await setup._settledForTesting();
       const { readAgentConnection } = await flockImport("agent-connections");
       expect(readAgentConnection(SKILL, BUTLER)?.accounts).toContain(accountId);
       const choices = await flockImport("whatsapp-connector/choices");
-      expect(choices.shareOf(BUTLER, accountId)).toBe(ownerPersonId());
+      expect(choices.isSharedWith(BUTLER, accountId)).toBe(true);
+      expect(choices.familyChats(accountId)).toEqual([FAMILY_CHAT]);
     });
 
     it("Butler, holding the shared account, is refused send-message before the server is asked", async () => {
