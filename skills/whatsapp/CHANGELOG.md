@@ -2,7 +2,7 @@
 
 ## 2.1.0
 
-- Reports the linked number, masked, so Flock can tell WhatsApp accounts apart: every answer from a linked WhatsApp (`link-status` and `link` once linked, `list-chats`, `read-chat`, `search`, `send-message`, and `unlink` for the number it unlinked) carries `signedInAs`, such as `+••••••••5678` (only the last 4 digits, never the whole number). No `signedInAs` when WhatsApp is not linked.
+- Reports the linked number, masked, so Flock can tell WhatsApp accounts apart: every answer from a linked WhatsApp (`link-status` and `link` once linked, `list-chats`, `read-chat`, `search`, `send-message`, and `unlink` for the number it unlinked) carries `signedInAs`, with its country calling code and last 4 digits shown and the middle hidden, such as `+91••••••5678` (all but the last 4 hidden when the calling code is unknown; never the whole number). No `signedInAs` when WhatsApp is not linked.
 
 ## 2.0.0
 

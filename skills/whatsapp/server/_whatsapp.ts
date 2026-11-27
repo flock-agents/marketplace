@@ -185,12 +185,45 @@ const masked = (digits: string) => `+${digits.slice(0, Math.max(0, digits.length
 /** The linked account's own number in its WhatsApp user id (919812345678:3@s.whatsapp.net). */
 const OWN_JID = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/;
 
-/** Who the link is signed in as, for Flock to tell WhatsApp accounts apart: the linked number, masked
- *  (never the whole number). None when not linked, or when the link holds no phone number. */
+/** The ITU country calling codes in use. No code is the start of another, so a number's code is the one
+ *  of these it starts with. */
+const CALLING_CODES = new Set(`
+  1 7
+  20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66
+  81 82 84 86 90 91 92 93 94 95 98
+  211 212 213 216 218 220 221 222 223 224 225 226 227 228 229 230 231 232 233 234 235 236 237 238 239
+  240 241 242 243 244 245 246 247 248 249 250 251 252 253 254 255 256 257 258 260 261 262 263 264 265
+  266 267 268 269 290 291 297 298 299
+  350 351 352 353 354 355 356 357 358 359 370 371 372 373 374 375 376 377 378 379 380 381 382 383 385
+  386 387 389 420 421 423
+  500 501 502 503 504 505 506 507 508 509 590 591 592 593 594 595 596 597 598 599
+  670 672 673 674 675 676 677 678 679 680 681 682 683 685 686 687 688 689 690 691 692
+  800 808 850 852 853 855 856 870 878 880 881 882 883 886 888
+  960 961 962 963 964 965 966 967 968 970 971 972 973 974 975 976 977 979 992 993 994 995 996 998
+`.trim().split(/\s+/));
+
+/** A number's country calling code (1 to 3 digits), or "" when it starts with none in use. */
+export function callingCodeOf(digits: string): string {
+  for (let len = 1; len <= 3; len++) if (CALLING_CODES.has(digits.slice(0, len))) return digits.slice(0, len);
+  return "";
+}
+
+/** A number with its calling code and last 4 digits shown and the rest hidden (+91••••••5678); all but
+ *  the last 4 hidden when the code is unknown or nothing would be left to hide. */
+export function maskedWithCode(digits: string): string {
+  const code = callingCodeOf(digits);
+  const hidden = digits.length - code.length - 4;
+  if (!code || hidden < 1) return masked(digits);
+  return `+${code}${"•".repeat(hidden)}${digits.slice(-4)}`;
+}
+
+/** Who the link is signed in as, for Flock to tell WhatsApp accounts apart: the linked number with its
+ *  calling code and last 4 digits (never the whole number). None when not linked, or when the link holds
+ *  no phone number. */
 export function signedInAsOf(auth: AuthHandle | undefined): string | undefined {
   if (!auth?.registered()) return undefined;
   const digits = OWN_JID.exec(String(auth.state.creds?.me?.id ?? ""))?.[1];
-  return digits ? masked(digits) : undefined;
+  return digits ? maskedWithCode(digits) : undefined;
 }
 
 /** A whole number param within [1, max], else `fallback`. */

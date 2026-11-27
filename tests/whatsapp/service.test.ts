@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, phoneDigits, signedInAsOf } from "../../skills/whatsapp/server/_whatsapp";
+import { MAX_RECONNECTS, MAX_SESSION_RECONNECTS, closeKind, formatCode, isTransportFailure, maskedWithCode, phoneDigits, signedInAsOf } from "../../skills/whatsapp/server/_whatsapp";
 import { LIMITS, pause } from "../../skills/whatsapp/server/_limits";
 import { OWN_JID, codeOf, history, linkedWorld, sleep, world, type World } from "./_mock";
 
@@ -693,7 +693,7 @@ describe("unlink", () => {
 });
 
 describe("who it is signed in as (signedInAs)", () => {
-  const MASKED = "+••••••••5678";
+  const MASKED = "+91••••••5678";
   const wholeNumber = /919876545678|98765456/;
 
   it("every answer from a linked WhatsApp carries the linked number, masked, never the whole number", async () => {
@@ -747,5 +747,27 @@ describe("who it is signed in as (signedInAs)", () => {
     expect(signedInAsOf(link(undefined))).toBeUndefined();
     expect(signedInAsOf(link("not a jid"))).toBeUndefined();
     expect(signedInAsOf(undefined)).toBeUndefined();
+  });
+
+  it("shows the country calling code and the last 4 digits, the middle hidden", () => {
+    expect(maskedWithCode("919876545678")).toBe("+91••••••5678");
+    expect(maskedWithCode("14155552671")).toBe("+1••••••2671");
+    expect(maskedWithCode("971501234567")).toBe("+971•••••4567");
+    expect(maskedWithCode("447911123456")).toBe("+44••••••3456");
+    expect(maskedWithCode("79161234567")).toBe("+7••••••4567");
+  });
+
+  it("an unknown calling code hides everything but the last 4", () => {
+    expect(maskedWithCode("99912345678")).toBe("+•••••••5678");
+    expect(maskedWithCode("28012345678")).toBe("+•••••••5678");
+  });
+
+  it("never the whole number, whatever its length", () => {
+    for (const digits of ["91987654", "9719876543", "12025550123", "919876545678", "971501234567890", "99912345"]) {
+      const out = maskedWithCode(digits);
+      expect(out).not.toContain(digits);
+      expect(out.replace(/\D/g, "").length).toBeLessThan(digits.length);
+      expect(out.endsWith(digits.slice(-4))).toBe(true);
+    }
   });
 });

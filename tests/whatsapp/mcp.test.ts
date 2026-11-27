@@ -144,8 +144,8 @@ describe("signedInAs in a tool answer", () => {
     try {
       const r: any = await handle(call(1, "list-chats"), whatsappTools(w.wa), { name: "whatsapp", version: "2.1.0" }, failureOf);
       expect(r.result.isError).toBeUndefined();
-      expect(r.result.structuredContent.signedInAs).toBe("+••••••••5678");
-      expect(JSON.parse(r.result.content[0].text).signedInAs).toBe("+••••••••5678");
+      expect(r.result.structuredContent.signedInAs).toBe("+91••••••5678");
+      expect(JSON.parse(r.result.content[0].text).signedInAs).toBe("+91••••••5678");
       expect(JSON.stringify(r)).not.toContain("919876545678");
     } finally { w.wa.shutdown(); rmSync(w.dir, { recursive: true, force: true }); }
   });
