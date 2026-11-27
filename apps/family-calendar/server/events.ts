@@ -33,6 +33,9 @@ const same = (a: string | null, b: string | null): boolean => (a ?? "").trim().t
 export const EVENT_FIELDS = ["title", "who", "date", "end_date", "weekdays", "repeat", "monthly_by", "start_time", "end_time", "location", "notes", "reminder", "kind", "added_by"];
 /** A timed event is nudged this long before it starts unless it says otherwise (`reminder`). */
 export const DEFAULT_REMINDER_MINUTES = 30;
+/** Whether a new timed event gets the default nudge: a one-off (or monthly, yearly) one does; a weekly or daily routine
+ *  (school, office, a class) is only on the calendar, never nudged unless the call asks (owner ruling, 2026-11-24). */
+export const nudgedByDefault = (repeat: string | null | undefined): boolean => repeat !== "weekly" && repeat !== "daily";
 export const MEMBER_FIELDS = ["name", "emoji", "colour"];
 
 /** An event as sent, checked: the rows it becomes (one per weekday for a weekly one). */
@@ -248,10 +251,11 @@ export function mountEventRoutes(hono: Hono<any>, kit: { db: Db; sqlite: any; em
             row = tx.update(events).set({ ...set, ...(e.repeat !== "none" && !e.dated ? {} : { date }), updated_at: new Date().toISOString(), updated_by: by }).where(eq(events.id, had.id)).returning().get();
             existing[existing.indexOf(had)] = row; updated++; changes.push(["events", row.id, "update"]);
           } else {
-            // A new timed event is nudged before it starts unless the call said otherwise; who asked is kept as added_by.
+            // A new timed event is nudged before it starts unless the call said otherwise, a weekly or daily routine never;
+            // who asked is kept as added_by.
             const added_by = e.added_by !== undefined ? e.added_by : addedBy;
             row = tx.insert(events).values({ title: e.title, date, repeat: e.repeat, start_time: e.start_time, who, added_by,
-              ...(e.start_time && e.reminder_minutes === undefined ? { reminder_minutes: DEFAULT_REMINDER_MINUTES } : {}), ...set, updated_by: by }).returning().get();
+              ...(e.start_time && e.reminder_minutes === undefined && nudgedByDefault(e.repeat) ? { reminder_minutes: DEFAULT_REMINDER_MINUTES } : {}), ...set, updated_by: by }).returning().get();
             existing.push(row); made++; changes.push(["events", row.id, "insert"]);
           }
           rows.push(row);

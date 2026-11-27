@@ -1,0 +1,73 @@
+{
+  "name": "WhatsApp",
+  "slug": "whatsapp",
+  "icon": "icon.svg",
+  "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
+  "version": "2.0.0",
+  "author": "flock",
+  "category": "integration",
+  "tags": [
+    "whatsapp",
+    "messaging",
+    "chat",
+    "social"
+  ],
+  "minFlockVersion": "0.25.0-beta.8",
+  "tier": "installable",
+  "requires": [
+    {
+      "type": "mcp_server",
+      "service": "whatsapp",
+      "description": "Link WhatsApp to Flock with a code on your phone",
+      "mcp": {
+        "archetype": "stdio-nocred",
+        "transport": "stdio",
+        "command": "bun",
+        "args": [
+          "{packageDir}/server/server.ts"
+        ],
+        "egress": true,
+        "envVars": [],
+        "credentialsRequired": false,
+        "setupInstructions": "Your agent links WhatsApp with you in chat: you type a link code on your phone."
+      }
+    }
+  ],
+  "security": {
+    "allowedFunctions": [
+      "link",
+      "link-status",
+      "list-chats",
+      "read-chat",
+      "search",
+      "send-message",
+      "unlink"
+    ],
+    "functionEffects": {
+      "link": "write",
+      "link-status": "read",
+      "list-chats": "read",
+      "read-chat": "read",
+      "search": "read",
+      "send-message": "irreversible",
+      "unlink": "write"
+    },
+    "trustLevel": "third-party",
+    "networkEndpoints": [
+      {
+        "hostname": "web.whatsapp.com",
+        "purpose": "WhatsApp's linked-device connection (one WebSocket) and its current version",
+        "methods": [
+          "GET"
+        ]
+      },
+      {
+        "hostname": "mmg.whatsapp.net",
+        "purpose": "The chat list and a few recent messages WhatsApp sends once, when it is linked (never photos, voice messages or documents)",
+        "methods": [
+          "GET"
+        ]
+      }
+    ]
+  }
+}

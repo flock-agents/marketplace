@@ -22,13 +22,13 @@
 // behind DraftListIo so the walk is unit-tested without one.
 
 import { type DraftListRow, draftRowForThread } from "./_draftRows";
-import { gmailViewUrl, pollInPageScript, parsePollResult } from "./_gmailNav";
-import { persistentCreate, persistentInteract, persistentClose } from "../../_shared/_google_helpers";
+import { gmailViewUrl, pollInPageScript, parsePollResult, createGmailNavigator, type GmailNavigator, type SessionStep } from "./_gmailNav";
+import { persistentCreate, persistentStep, persistentClose } from "../../_shared/_google_helpers";
 
 export const MAX_DRAFT_PAGES = 10;
-// In practice the deadline below, not this cap, is what ends a long walk — each page is a full
-// Gmail reload (persistentInteract navigates the URL fresh every time), so 10 pages of that cost
-// far more wall-clock time than the deadline allows.
+// In practice the deadline below, not this cap, is what ends a long walk — a page that does not
+// land in-app is a full Gmail reload (createGmailNavigator, _gmailNav.ts), so 10 pages of that
+// cost far more wall-clock time than the deadline allows.
 export const DRAFT_LIST_DEADLINE_MS = 55_000;
 // Page 1 is a cold Gmail load (auth + first paint); later pages reuse the same session and only
 // need to re-render the list, so they settle faster. Verified live 2026-09-24 (see _gmailNav.ts).
@@ -117,7 +117,8 @@ export const PAGE_EXPR = `({ rows: ${VISIBLE_DRAFT_ROWS_EXPR}, hasOlder: ${OLDER
 
 export interface DraftListIo {
   open(url: string, actions: unknown[]): Promise<{ psId: string; content: unknown }>;
-  go(psId: string, url: string, actions: unknown[]): Promise<{ content: unknown }>;
+  /** Later pages: steps on the page `open` returned (in-app first, a full load as fallback). */
+  step(psId: string): SessionStep;
   close(psId: string): Promise<void>;
 }
 
@@ -149,17 +150,23 @@ export async function readDraftList(
   const startedAt = now();
   const rows: DraftListRow[] = [];
   let psId = "";
+  let navigator: GmailNavigator | null = null;
   let prevFirstId = "";
   try {
     for (let page = 1; ; page++) {
       if (page > 1 && now() - startedAt >= deadlineMs) {
         return { rows, complete: false, pages: page - 1, reason: "deadline" };
       }
-      const actions = [{ action: "evaluate", script: pollInPageScript(pageReadyExpr(page, prevFirstId), PAGE_EXPR, pagePollMs(page)) }];
-      const url = gmailViewUrl(draftsPageHash(page));
-      const res = page === 1 ? await io.open(url, actions) : await io.go(psId, url, actions);
-      if (page === 1) psId = (res as { psId: string }).psId;
-      const poll = parsePollResult<PageResult>(res.content);
+      const readyExpr = pageReadyExpr(page, prevFirstId);
+      let poll: { ready: boolean; result: PageResult | null };
+      if (!navigator) {
+        const opened = await io.open(gmailViewUrl(draftsPageHash(page)), [{ action: "evaluate", script: pollInPageScript(readyExpr, PAGE_EXPR, pagePollMs(page)) }]);
+        psId = opened.psId;
+        navigator = createGmailNavigator(io.step(psId));
+        poll = parsePollResult<PageResult>(opened.content);
+      } else {
+        poll = await navigator.go<PageResult>({ hash: draftsPageHash(page), readyExpr, resultExpr: PAGE_EXPR, reloadTimeoutMs: pagePollMs(page) });
+      }
       if (!poll.ready || !poll.result) return { rows, complete: false, pages: page - 1, reason: "page_not_ready" };
       const pageRows = Array.isArray(poll.result.rows) ? poll.result.rows : [];
       rows.push(...pageRows);
@@ -208,10 +215,7 @@ export function browserDraftListIo(): DraftListIo {
       if (!psId) throw new Error("Failed to create persistent session for the Gmail drafts list");
       return { psId, content: res?.content };
     },
-    go: async (psId, url, actions) => {
-      const res = await persistentInteract(psId, actions, false, undefined, url);
-      return { content: res?.content };
-    },
+    step: (psId) => persistentStep(psId),
     close: (psId) => persistentClose(psId),
   };
 }

@@ -249,7 +249,7 @@
   },
   "name": "Gmail",
   "slug": "gmail",
-  "version": "1.6.8",
+  "version": "1.6.9",
   "minFlockVersion": "0.13.0",
   "author": "flock"
 }

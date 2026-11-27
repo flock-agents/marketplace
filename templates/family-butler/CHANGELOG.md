@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+
+- **Named Butler.** The template's name, the agent's default name, the catalog entry and its onboarding card say "Butler" (was "Family Butler"), so there is one butler, the family's, beside each person's Personal Assistant. The template's slug stays `family-butler`.
+- **Works in a direct chat.** The family's setup now starts in a direct chat with Butler, before any group (Flock's Butler-first onboarding). The SOUL says so: in a direct chat it helps that one person; it is one agent, so private things belong with their Personal Assistant; a reminder is a TODO in the chat it was asked in.
+- **Holds no one's own accounts.** Mail, personal calendars and WhatsApp are each with the person's Personal Assistant: Butler asks it for them (delegate, mode "request"), never says it checked an account, and never offers to connect or reconnect one.
+- **No intro where Flock greets.** Flock's setup questions open the direct chat with the person who set the family up, and Flock welcomes the family group; the intro line now says "your family's butler" and drops "Tag me".
+- Tasks, apps and schedules are unchanged.
+
 ## 1.9.0
 
 - **The briefs come from the Family Calendar and go to the family group.** The template sets up the Family Calendar app (`family-calendar`, required) beside the Meal Planner, paired with Family Butler. Morning Briefing (8 AM) reads the calendar's `brief` operation with `{"kind":"morning"}`: today's events with their notes and who drops or picks up, anything cancelled or moved, new dates imported from email or school portals, the to-dos now showing, and the weather. Evening Reminder (9 PM) reads it with `{"kind":"evening"}`: tomorrow's events and the to-dos due tomorrow, and any change or new date since the morning (the call moves the calendar's mark, so nobody would hear of them otherwise). It replaces the calendar's per-event "evening before" reminder. Short, WhatsApp-style lines; when every list in the brief is empty the brief replies NOTHING_NEW and the family gets no message. Both post into the family group: Flock binds Family Butler's routines to the Family group (`deliverTo` stays null). Needs Family Calendar 3.0.0 (the `brief` operation).
@@ -10,6 +18,8 @@
 - **Reminders are group TODOs.** The `reminders` skill is gone; the `todos` skill is in its place. The SOUL's new Reminders section: "remind us about X" in the family group is a group TODO made from the group chat (`POST /api/internal/todos`), at the time asked; a day with no time is set for 9 am and the butler says so; no date at all, it asks once "When?". Never the Family Calendar for a reminder: the calendar is for events, and its to-dos come from its planning. README and SUGGESTIONS say the same. Needs Flock's group TODOs (feat/group-todos).
 - **The morning brief's weather line says where the weather comes from.** A live 8 AM brief had no weather: the prompt asked for it but named no way to get it, and the `weather` skill SUGGESTIONS.json pointed at no longer exists (Flock removed its bundled weather MCP). The morning prompt now says: one WebSearch (every Flock agent has the tool; the template adds nothing) for today's weather in the city the family lives in, as the butler knows it from the family's chats and its memory, never guessed from the brief's timezone; no known city or nothing found, the line is left out without a word. The `weather` suggestion is gone.
 - Installed Butlers keep their own tasks and apps until Flock applies the template to them again.
+- **Needs Flock 0.25.0-beta.1** (`minFlockVersion`, was 0.15.0 in the template and 0.24.0-beta.1 in the catalog): group TODOs and
+  the internal TODO route the briefs read are not in Flock 0.24.0.
 
 ## 1.8.0
 

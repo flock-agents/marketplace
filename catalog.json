@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "updatedAt": "2026-11-23T00:00:00Z",
+  "updatedAt": "2026-11-25T00:00:00Z",
   "items": [
     {
       "slug": "linear",
@@ -97,16 +97,16 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/family-calendar",
-      "latestVersion": "3.0.0",
-      "latestTag": "family-calendar-v3.0.0",
+      "latestVersion": "3.1.1",
+      "latestTag": "family-calendar-v3.1.1",
       "minFlockVersion": "0.19.0",
       "publishedAt": "2026-08-13T15:30:00Z",
-      "updatedAt": "2026-11-22T00:00:00Z"
+      "updatedAt": "2026-11-24T00:00:00Z"
     },
     {
       "slug": "family-butler",
       "type": "template",
-      "name": "Family Butler",
+      "name": "Butler",
       "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
       "author": "flock",
       "category": "family",
@@ -119,16 +119,16 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "templates/family-butler",
-      "latestVersion": "1.9.0",
-      "latestTag": "family-butler-v1.9.0",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "1.10.0",
+      "latestTag": "family-butler-v1.10.0",
+      "minFlockVersion": "0.25.0-beta.1",
       "onboardingCard": {
         "id": "household",
         "label": "Run the household",
         "description": "Groceries, meals, family routines",
         "emoji": "🏠",
         "order": 40,
-        "agentName": "Family Butler",
+        "agentName": "Butler",
         "services": [
           "zepto",
           "swiggy-instamart",
@@ -138,7 +138,7 @@
         ]
       },
       "publishedAt": "2026-08-11T17:00:00Z",
-      "updatedAt": "2026-11-22T00:00:00Z"
+      "updatedAt": "2026-11-26T00:00:00Z"
     },
     {
       "slug": "gmail",
@@ -156,11 +156,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/gmail",
-      "latestVersion": "1.6.8",
-      "latestTag": "gmail-v1.6.8",
-      "minFlockVersion": "0.24.0",
+      "latestVersion": "1.6.9",
+      "latestTag": "gmail-v1.6.9",
+      "minFlockVersion": "0.25.0-beta.2",
       "publishedAt": "2026-08-14T10:00:00Z",
-      "updatedAt": "2026-11-24T00:00:00Z"
+      "updatedAt": "2026-11-25T00:00:00Z"
     },
     {
       "slug": "google-calendar",
@@ -331,11 +331,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "skills/linkedin",
-      "latestVersion": "1.2.4",
-      "latestTag": "linkedin-v1.2.4",
-      "minFlockVersion": "0.24.0",
+      "latestVersion": "1.2.6-beta.1",
+      "latestTag": "linkedin-v1.2.6-beta.1",
+      "minFlockVersion": "0.25.0-beta.2",
       "publishedAt": "2026-08-19T05:23:00Z",
-      "updatedAt": "2026-11-23T00:00:00Z"
+      "updatedAt": "2026-11-25T00:00:00Z"
     },
     {
       "slug": "slack",
@@ -358,6 +358,28 @@
       "minFlockVersion": "0.7.0",
       "publishedAt": "2026-09-10T11:18:08Z",
       "updatedAt": "2026-09-23T00:00:00Z"
+    },
+    {
+      "slug": "whatsapp",
+      "type": "connector",
+      "name": "WhatsApp",
+      "description": "Read your WhatsApp chats and groups, search them, and send a message you approved",
+      "author": "flock",
+      "category": "integration",
+      "tags": [
+        "whatsapp",
+        "messaging",
+        "chat",
+        "social"
+      ],
+      "icon": "icon.svg",
+      "repo": "flock-agents/marketplace",
+      "path": "skills/whatsapp",
+      "latestVersion": "2.0.0",
+      "latestTag": "whatsapp-v2.0.0-rc1",
+      "minFlockVersion": "0.25.0-beta.8",
+      "publishedAt": "2026-11-25T00:00:00Z",
+      "updatedAt": "2026-11-26T00:00:00Z"
     },
     {
       "slug": "slack-desk",
@@ -400,7 +422,7 @@
       "path": "apps/email-desk",
       "latestVersion": "3.0.0",
       "latestTag": "email-desk-v3.0.0",
-      "minFlockVersion": "0.25.0",
+      "minFlockVersion": "0.25.0-beta.1",
       "personalAssistant": {
         "always": true,
         "useCase": "email",
@@ -414,7 +436,7 @@
         "id": "email",
         "label": "Stay on top of email",
         "description": "Finds what needs you, drafts replies",
-        "emoji": "\ud83d\udce5",
+        "emoji": "📥",
         "order": 10,
         "services": [
           "gmail"
@@ -723,11 +745,11 @@
       "icon": "icon.svg",
       "repo": "flock-agents/marketplace",
       "path": "apps/planner",
-      "latestVersion": "4.0.3",
-      "latestTag": "planner-v4.0.3",
-      "minFlockVersion": "0.24.0-beta.1",
+      "latestVersion": "4.2.0",
+      "latestTag": "planner-v4.2.0-rc1",
+      "minFlockVersion": "0.25.0-beta.9",
       "publishedAt": "2026-10-11T00:00:00Z",
-      "updatedAt": "2026-11-24T00:00:00Z"
+      "updatedAt": "2026-11-26T00:00:00Z"
     },
     {
       "slug": "tracker",

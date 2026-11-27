@@ -1,5 +1,5 @@
 // add_events as the agent calls it: a family's week in one call, weekly events kept once per weekday, members made as they
-// are named, each event's own nudge (30 minutes before a timed one unless it says), a birthday every year, a due date as a
+// are named, each event's own nudge (30 minutes before a timed one-off unless it says; none for a weekly or daily routine), a birthday every year, a due date as a
 // deadline, who added it, and a refusal that names every bad field and writes nothing.
 import { describe, it, expect } from "bun:test";
 import { boot } from "./testkit";
@@ -32,9 +32,10 @@ describe("add_events", () => {
     const events = k.rows("events");
     expect(events).toHaveLength(7);
     expect(events.every((e) => e.who === "Agastya" && e.updated_by === "agent:butler")).toBe(true);
-    expect(events[0]).toMatchObject({ notes: drops, reminder_minutes: 30, kind: "event", status: "active", added_by: null, imported: 0 });   // half an hour before, unless it says
+    // A weekly routine is only on the calendar, never nudged (owner 2026-11-24), unless the call asks for a reminder.
+    expect(events[0]).toMatchObject({ notes: drops, reminder_minutes: null, kind: "event", status: "active", added_by: null, imported: 0 });
     expect(events[5].reminder_minutes).toBe(60);
-    expect(events[2].reminder_minutes).toBe(30);
+    expect(events[2].reminder_minutes).toBeNull();
     expect(k.rows("members").map((m) => [m.name, m.colour])).toEqual([["Agastya", "accent"]]);
     // What the Week page reads for 20 to 26 Nov, and for a week next March: every class on its days.
     const weekly = (await k.owner("GET", "/api/_data/events?repeat[ne]=none&date[lte]=2026-11-26&limit=500")).body.rows;
@@ -60,7 +61,7 @@ describe("add_events", () => {
     // `who` is written as the member is named, whatever capitals the call used; a new member takes the next colour.
     expect(k.rows("events").map((e) => [e.title, e.who, e.date, e.repeat, e.reminder_minutes, e.kind, e.added_by])).toEqual([
       ["Dentist", "Ankita", "2026-11-27", "none", 60, "event", "Shiva"], ["Grandma's birthday", null, "1950-12-05", "yearly", null, "event", "Shiva"],
-      ["Swimming", "Agastya", "2027-01-04", "weekly", 30, "event", "Shiva"], ["School run", "Shiva", "2026-11-23", "weekly", 30, "event", "Shiva"],
+      ["Swimming", "Agastya", "2027-01-04", "weekly", null, "event", "Shiva"], ["School run", "Shiva", "2026-11-23", "weekly", null, "event", "Shiva"],
       ["Society maintenance", null, "2026-12-05", "monthly", null, "deadline", "Ankita"]]);
     // A yearly one sent again is the same event (its day of the year), whatever year the call names.
     expect((await k.op("add_events", { events: [{ title: "Grandma's birthday", date: "2026-12-05", repeat: "yearly", notes: "Cake" }] })).updated).toBe(1);
@@ -68,6 +69,25 @@ describe("add_events", () => {
     // A member named again is changed, not doubled.
     await k.op("add_events", { events: [{ title: "Walk", who: "Gowri Shankar", weekdays: ["Mon"] }], members: [{ name: "gowri shankar", colour: "danger" }] });
     expect(k.rows("members").filter((m) => m.name === "Gowri Shankar")).toMatchObject([{ colour: "danger", emoji: "👴" }]);
+  });
+
+  it("a weekly or daily routine gets no nudge unless asked; a one-off, monthly or yearly timed event still does (live run 2026-11-24)", async () => {
+    const k = await boot({ now: NOW });
+    const r = await k.op("add_events", { events: [
+      { title: "Office", who: "Shiva", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], start_time: "11:00", end_time: "18:00" },
+      { title: "School", who: "kid", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri"], start_time: "07:30", end_time: "15:00", notes: "The school bus drops and picks up", reminder: null },
+      { title: "Walk", who: "dad", date: "2026-11-21", repeat: "daily", start_time: "06:00" },
+      { title: "Swimming", who: "kid", weekdays: ["Sat"], start_time: "09:00", reminder: 15 },
+      { title: "Fee due", date: "2026-11-25", start_time: "10:00" },
+      { title: "Committee", date: "2026-12-06", repeat: "monthly", monthly_by: "weekday", start_time: "11:00" }] });
+    expect(r.error).toBeUndefined();
+    const by = (t: string) => k.rows("events").filter((e) => e.title === t).map((e) => e.reminder_minutes);
+    expect(by("Office")).toEqual([null, null, null, null, null]);
+    expect(by("School")).toEqual([null, null, null, null, null]);
+    expect(by("Walk")).toEqual([null]);
+    expect(by("Swimming")).toEqual([15]);
+    expect(by("Fee due")).toEqual([30]);
+    expect(by("Committee")).toEqual([30]);
   });
 
   it("the same event sent again changes the one there; a weekly one keeps the day it began", async () => {

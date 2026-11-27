@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.2.0
+
+- One meaning per word: setup decides once what each family word is (a kind with their words, a dish, a fixed item) and
+  the planner reads that decision; templates are the only place meaning lives (one template per alternative), the library
+  is history only. A bare word means one dish only where the catalog says so (dosa = Plain dosa; upma, sabzi, gravy are kinds).
+- Rules have typed targets (kind / sub-kind / item / ingredient); a swap gives a planned dish ("Pancakes when it's upma");
+  when it is unknown whether a dish breaks a rule, it is planned and asked (weekly in the plan's one question, right away
+  after an edit), allergies included.
+- Per-person versions of a meal: a box linked to the home meal ("Paratha roll with that day's sabzi"), a person's extras
+  beside Lunch, only a box that replaces a meal takes its person off it; the cook's limit counts cooked dishes per visit.
+- New meal questions (family meal first, who differs, anyone eats differently) with recall forms; needs Flock 0.25.0-beta.9+.
+- Every setup and planning model read on the balanced tier.
+
 ## 4.0.3
 
 - The plan's message asks one question at most: the meals short of dishes are named together ("I know only a few dishes
