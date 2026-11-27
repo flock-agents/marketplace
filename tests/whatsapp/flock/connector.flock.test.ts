@@ -3,6 +3,8 @@
 // No WhatsApp account, no model: the server never links, and every outbound connection it makes is refused except to
 // this machine (_world.ts), so it reaches WhatsApp only through Flock's egress proxy, whose upstream is a fake that
 // refuses every tunnel. The tests run in order and share one Flock.
+// Last, with the connection deleted and the package installed again: an agent's first call in an owner turn connects it
+// by itself (Flock's mcp-auto-connect.ts), with no tap and no hand-off.
 // Run: tests/whatsapp/flock/run-flock.sh (skipped without FLOCK_SERVER_DIR).
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from "bun:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
@@ -167,6 +169,14 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
     beforeAll(async () => {
       const { ownerPersonId } = await flockImport("access-list");
       const setup = await flockImport("family/whatsapp-setup");
+      // Connected is not linked: with no code typed (link-status says linked: false), no family list can be saved.
+      expect(setup.whatsappLinked(ownerPersonId())).toBe(false);
+      expect(await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] })).toMatchObject({ ok: false });
+      // No WhatsApp account here: the connector's "linked: true" answer is stood in, through the gate's own hook.
+      const gate = await flockImport("whatsapp-connector/gate");
+      gate.afterWhatsAppCall({ skillId: SKILL, functionName: "link-status", agentId: PA, params: {}, preferredAccountId: accountId },
+        { success: true, result: { linked: true, link: { phase: "linked" }, chats: 0 }, duration_ms: 0 });
+      expect(setup.whatsappLinked(ownerPersonId())).toBe(true);
       const done = await setup.finishWhatsAppSetup(ownerPersonId(), { family: [FAMILY_CHAT] });
       expect(done).toEqual({ ok: true, family: [FAMILY_CHAT] });
       await setup._settledForTesting();
@@ -328,6 +338,42 @@ describe.skipIf(!enabled)("the WhatsApp connector 2.x in Flock", () => {
       expect(existsSync(dataDir)).toBe(false);
       expect(await isEgressBindingRegistered(bindingOf(start))).toBe(false);
       expect(mgr.getConnection(connectionId)).toBeFalsy();
+    });
+  });
+
+  describe("first use, with nothing connected", () => {
+    it("in an owner turn, the agent's first run_skill whatsapp link-status connects it on the spot and answers linked: false, with no hand-off", async () => {
+      // Installed again by Flock's marketplace installer, and put on the PA as Flock's WhatsApp setup puts it
+      // (family/whatsapp-setup.ts ensureConnector): nothing connected, nothing tapped.
+      expect(await flock.installWhatsApp()).toMatchObject({ success: true });
+      expect((await flockImport("skill-install")).installSkillOnAgent(PA, SKILL).ok).toBe(true);
+      const { getSkill } = await flockImport("skills-registry");
+      expect(getSkill(SKILL)?.mcpConnectionId).toBeFalsy();
+      const ofSkill = () => mgr.listConnections().filter((c: any) => c.skillId === SKILL || c.packageSkillId === SKILL);
+      expect(ofSkill()).toEqual([]);
+
+      const { createSession } = await flockImport("sessions");
+      const session = createSession(`wa-e2e-first-use-${Date.now()}`, PA);
+      (await flockImport("owner-turn"))._testing.startOwnerWrittenTurn(session.id);
+      const { _testInternals: handoffs } = await flockImport("agent-browser-handoff");
+      const { listHandoffRequests } = await flockImport("handoff-requests");
+      const before = { handoffs: handoffs.handoffIds().length, requests: listHandoffRequests().length };
+
+      const { executeSkillFunction } = await flockImport("skill-executor");
+      const r = await executeSkillFunction({ skillId: SKILL, functionName: "link-status", agentId: PA, sessionId: session.id, callerSessionId: session.id, params: {} });
+      expect(r.error).toBeUndefined();
+      expect(r.success).toBe(true);
+      expect(JSON.parse(r.result.content[0].text)).toMatchObject({ linked: false });
+
+      const conns = ofSkill();
+      expect(conns).toHaveLength(1);
+      expect(conns[0]).toMatchObject({ transport: "stdio", serverCommand: "bun", serverArgs: ["{packageDir}/server/server.ts"], packageSkillId: SKILL, skillId: SKILL, enabled: true });
+      const start = serverStarts(conns[0].id).at(-1)!;
+      expect(start.argv).toEqual([join(pkgDir, "server", "server.ts")]);
+      expect(start.env.MCP_DATA_DIR).toBe(join(flock.DATA_DIR, "mcp", "data", conns[0].id));
+      const { isAgentConnected } = await flockImport("connector-connect");
+      expect(isAgentConnected(SKILL, PA)).toBe(true);
+      expect({ handoffs: handoffs.handoffIds().length, requests: listHandoffRequests().length }).toEqual(before);
     });
   });
 });
