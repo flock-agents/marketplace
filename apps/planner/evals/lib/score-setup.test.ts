@@ -90,6 +90,25 @@ describe("scoreSetup", () => {
     expect(fails(s)).toEqual([]);
   });
 
+  test("dish_frequency: a count or day the family's words never say with the dish is not required (h15 curd daily, h17 curd)", () => {
+    const lost = base();
+    lost.library.find((d) => d.name === "Rajma")!.frequency = null;
+    lost.library.find((d) => d.name === "Khichdi")!.days = null;
+    const dishes = (rajma: string, khichdi: string) => [`A: Dinner is roti, lauki, ${rajma}, ${khichdi}.`];
+    // Said with the dish: still lost. Never said (the dish named bare): not scored.
+    expect(fails(lost, { transcript: dishes("rajma twice a week", "khichdi on Saturday") })).toContain("dish_frequency");
+    expect(fails(lost, { transcript: dishes("rajma", "khichdi") })).not.toContain("dish_frequency");
+    expect(Object.keys(scoreSetup(FIX, lost, { transcript: dishes("rajma twice a week", "khichdi") }).rates).includes("dish_frequency")).toBe(true);
+  });
+
+  test("rules: a hard or soft rule the family's words never say is not required of the setup (h15 vegetarian, h16 beef and pork)", () => {
+    const missing = base();
+    missing.rules = missing.rules.filter((r) => r.what !== "fasting");
+    // Said ("fasts"): still missing. Never said: nothing to read, not scored.
+    expect(fails(missing, { transcript: ["A: Dadu Ram fasts on Mondays"] })).toContain("hard_rules");
+    expect(fails(missing, { transcript: ["A: we eat roti and dal"] })).not.toContain("hard_rules");
+  });
+
   test("rules: missing, hard saved soft, soft saved hard, lost frequency, unsaid, quote not said, frequency on a hard rule", () => {
     const missing = base();
     missing.rules = missing.rules.filter((r) => r.what !== "fasting");

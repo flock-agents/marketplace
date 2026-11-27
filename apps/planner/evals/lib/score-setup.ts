@@ -189,6 +189,20 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   }
 
   // ── Library ──
+  // A count or day is required only when a sentence of the family's names the dish with words that say it (the persona may name
+  // the dish bare: "and curd"); with no transcript, every TRUTH frequency is required as before.
+  const sentences = o.transcript ? [...o.transcript.filter((l) => l.startsWith("A")).map((l) => l.replace(/^A\d*:\s*/, "")), JSON.stringify(h.household)].flatMap((l) => l.split(/[.!?;\n]+/)).map(normWords) : null;
+  const saidWith = (name: string, aka: string[] | undefined, frequency?: string | null, days?: readonly string[] | null): boolean => {
+    if (!sentences) return true;
+    const words = [name, ...(aka ?? [])].flatMap((n) => normWords(n).trim().split(" ")).filter((w) => w.length >= 4);
+    const named = sentences.filter((l) => words.some((w) => l.includes(` ${w}`)));
+    const says = (re: RegExp) => named.some((l) => re.test(l));
+    const day = days?.length ? says(/\b(mon|tue|wed|thu|fri|sat|sun|week ?ends?|weekdays?)/) : true;
+    const count = !frequency ? true : frequency === "daily" ? says(/\b(daily|every ?day|each day|all days|every (morning|night|lunch|dinner|breakfast))\b/)
+      : frequency.endsWith("/week") ? says(/\b(once|twice|thrice|one|two|three|four|\d+|times)\b/)
+      : frequency === "usually" ? says(/\b(most|usually|mostly|regular)/) : says(/\b(some|now and then|occasion|rare|often|busy|when|if|few|once in)/);
+    return day && count;
+  };
   const said = t.library.filter((d) => !d.unsaid);
   // Saved rows are recognised among every truth dish (an unsaid "Curd" is not "Curd rice"); only said ones are required.
   const names = [...new Set(t.library.map((d) => d.name))];
@@ -208,7 +222,7 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
       const shared = rows.filter((x) => kindOf(truthSlotName(c, x.slot)) === "main" && !slotsOfTruth(d.name).includes(lc(truthSlotName(c, x.slot))));
       add("personal_placement", at.length > 0 && !shared.length, `${d.name} (${d.slot}'s) saved at ${rows.map((x) => x.slot).join(",")}`);
     }
-    if (d.frequency || d.days) {
+    if ((d.frequency || d.days) && saidWith(d.name, d.aka, d.frequency, d.days)) {
       // Several saved rows may be this one dish ("Aloo paratha" and "Paratha", "Maacher jhol" and "Rui fish curry"): one of them
       // on its slot carrying the frequency and days is enough.
       const ok = (row: (typeof rows)[number]) => sameFrequency(row.frequency, d.frequency) && (!d.days || sameDays(d.days, row.days)) && (!!d.days || !row.days?.length);
@@ -244,7 +258,11 @@ export function scoreSetup(h: Household, s: SetupOut, o: { transcript?: string[]
   }
 
   // ── Rules ──
+  // A rule the family's words never say (the persona left out "pure vegetarian") has nothing to be read from: it is required only
+  // when scored on a transcript that says it (TRUTH itself is unchanged: Eval 2 and the self-test still hold it).
+  const spoken = o.transcript ? [...o.transcript.filter((l) => l.startsWith("A")).map((l) => l.replace(/^A\d*:\s*/, "")), JSON.stringify(h.household)].join(" \n ") : null;
   for (const r of t.rules) {
+    if (spoken !== null && r.what !== "note" && !r.quote.test(spoken)) continue;
     if (r.hardAny) {
       const got = ruleSaved(c, r, s.rules).filter((x) => r.per_meal == null || x.per_meal === r.per_meal);
       add("soft_rules", got.length > 0 || softSaved(c, r, s.rules).some((x) => r.per_meal == null || x.per_meal === r.per_meal), `missing: ${r.title}`);

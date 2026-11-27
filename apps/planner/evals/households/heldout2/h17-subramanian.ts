@@ -60,7 +60,7 @@ export const h17: Household = {
       ...dish("Egg curry", ["Dinner"]), ...dish("Paneer butter masala", ["Dinner"], { frequency: "sometimes" }),
     ],
     rules: [
-      avoid("no_nonveg_tue", "No chicken or eggs on Tuesdays", ["meat", "egg"], /tuesday/i, { days: ["Tue"] }),
+      avoid("no_nonveg_tue", "No chicken or eggs on Tuesdays", ["chicken", "egg"], /tuesday/i, { days: ["Tue"] }),
       note("less_spicy_kid", "less spicy for Ishaan", "Ishaan", /spic/i),
     ],
     seed: [
