@@ -55,6 +55,8 @@ apps/<slug>/
 | `version` | Yes | Semver version string |
 | `author` | Yes | Publisher identifier |
 | `category` | Yes | Category for discovery |
+| `about` | Catalog only | 2-3 plain sentences for people, shown in full in the marketplace. `description` stays for agents |
+| `audience` | Catalog only | `family`, `personal` or `work`: who the item is for. Separate from `category` |
 | `tags` | Yes | Search tags |
 | `minFlockVersion` | Yes | Minimum Flock version. An app whose own code calls an SDK API newer than this also puts it in `flock.app.json` (see "Talking to the paired agent") |
 | `type` | Yes | `"static"`, `"fullstack"`, or `"managed"` |

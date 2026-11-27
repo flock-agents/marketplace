@@ -52,6 +52,8 @@
       "usage": "app",
       "name": "Meal Planner",
       "description": "Plan meals for the week and manage your shopping list",
+      "about": "The week's meals for the family, a guess at what's running out, and one grocery cart a day, ordered only when you say yes.",
+      "audience": "family",
       "author": "flock",
       "category": "lifestyle",
       "tags": [
@@ -85,6 +87,8 @@
       "usage": "app",
       "name": "Family Calendar",
       "description": "Family events, schedules, and reminders at a glance",
+      "about": "School, classes, trips and birthdays for everyone in one place, with reminders before each.",
+      "audience": "family",
       "author": "flock",
       "category": "family",
       "tags": [
@@ -108,6 +112,8 @@
       "type": "template",
       "name": "Butler",
       "description": "A household assistant that manages groceries, meals, and family routines through Telegram",
+      "about": "Runs the family's planning and remembering: the calendar, the week's meals, groceries and trips. Keeps everyone in the family group in the loop.",
+      "audience": "family",
       "author": "flock",
       "category": "family",
       "tags": [
@@ -387,6 +393,8 @@
       "usage": "app",
       "name": "Slack Desk",
       "description": "Builds memory from your Slack conversations and surfaces tasks you missed — reads only, never posts",
+      "about": "Remembers what happens in your Slack, so nothing you were asked for slips by. It only reads, and never posts.",
+      "audience": "work",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -410,6 +418,8 @@
       "usage": "app",
       "name": "Email Desk",
       "description": "Reads your Gmail into your assistant's memory and drafts replies in your voice for you to send. Nothing sends without you",
+      "about": "Reads your Gmail and drafts replies in your own voice. You approve every one before it goes.",
+      "audience": "personal",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -449,6 +459,8 @@
       "usage": "app",
       "name": "Calendar Desk",
       "description": "Reads your Google Calendar, shows the week on Your Schedule, sends a prep note before meetings, and keeps the notes you leave on events",
+      "about": "Shows your week from Google Calendar and sends a short prep note before your meetings.",
+      "audience": "personal",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -484,6 +496,8 @@
       "type": "template",
       "name": "Slack Assistant",
       "description": "Remembers what happens in your Slack and tells you what you missed",
+      "about": "Remembers what happens in your Slack and tells you what you missed.",
+      "audience": "work",
       "author": "flock",
       "category": "professional",
       "tags": [
@@ -517,6 +531,8 @@
       "type": "template",
       "name": "Inbox Assistant",
       "description": "Watches your inbox and drafts the replies that need writing, in your own voice, for you to approve. Nothing sends without you.",
+      "about": "Watches your inbox and drafts the replies that need writing, in your own voice. You approve each one.",
+      "audience": "personal",
       "author": "flock",
       "category": "professional",
       "tags": [
@@ -552,6 +568,8 @@
       "usage": "template",
       "name": "Bookings",
       "description": "Lets your clients book time slots at your clinic, salon or tuition, and shows today's bookings first; one client per slot (not group classes with a capacity); not for noting your own appointments.",
+      "about": "Lets your clients book a time slot at your clinic, salon or class, and shows today's bookings.",
+      "audience": "work",
       "author": "flock",
       "category": "business",
       "tags": [
@@ -575,6 +593,8 @@
       "usage": "template",
       "name": "Checklist",
       "description": "One list of things to tick off, grouped, with who and by when: a move, a trip, a launch.",
+      "about": "One list to tick off, grouped, with who does what by when. Good for a move, a wedding or a trip.",
+      "audience": "family",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -598,6 +618,8 @@
       "usage": "template",
       "name": "Dashboard",
       "description": "A live page of key numbers, a trend and recent events that an agent keeps current.",
+      "about": "A live page of the numbers you care about, with a trend and recent events, kept current for you.",
+      "audience": "work",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -620,6 +642,8 @@
       "usage": "template",
       "name": "Directory",
       "description": "A browsable set of people, places or things with a picture and contact details.",
+      "about": "A browsable set of people, places or things, each with a picture and contact details.",
+      "audience": "family",
       "author": "flock",
       "category": "lifestyle",
       "tags": [
@@ -642,6 +666,8 @@
       "usage": "template",
       "name": "Invoices",
       "description": "Bills your own customers with GST (you are the seller), tracks who has paid you, and lets an agent chase what's overdue; not for bills you pay.",
+      "about": "Bill your customers with GST, see who has paid you, and send reminders to those who haven't.",
+      "audience": "work",
       "author": "flock",
       "category": "business",
       "tags": [
@@ -665,6 +691,8 @@
       "usage": "template",
       "name": "Itinerary",
       "description": "A trip reference: day-by-day plan, bookings, packing and budget. Opens with a Goa family trip as samples: give samples for any other trip.",
+      "about": "A day-by-day plan with bookings, packing and budget, so everyone going sees the same trip.",
+      "audience": "family",
       "author": "flock",
       "category": "travel",
       "tags": [
@@ -688,6 +716,8 @@
       "usage": "template",
       "name": "Money",
       "description": "A household's money (not a business's books): transactions, budgets, investments and goals. Set overviewLead: spending (budget, running costs) or netWorth (investments).",
+      "about": "What the house spends each month by category, budgets, investments and savings goals.",
+      "audience": "family",
       "author": "flock",
       "category": "finance",
       "tags": [
@@ -711,6 +741,8 @@
       "usage": "template",
       "name": "Pipeline",
       "description": "People or deals moving through stages: hiring candidates, leads, proposals, orders, applications.",
+      "about": "People or deals moving through stages, such as candidates, leads or orders, so you see what is stuck.",
+      "audience": "work",
       "author": "flock",
       "category": "business",
       "tags": [
@@ -734,6 +766,8 @@
       "usage": "template",
       "name": "Meal Planner",
       "description": "The family's meals for the week, day by day, with the groceries for them ordered on the family's grocery app, the everyday items and the family's recipe book; not for school runs, chores or appointments.",
+      "about": "The family's meals for the week, day by day, with the groceries for them ordered on the family's say-so.",
+      "audience": "family",
       "author": "flock",
       "category": "family",
       "tags": [
@@ -757,6 +791,8 @@
       "usage": "template",
       "name": "Tracker",
       "description": "Rows with a status: vendors, repairs, collections, anything to follow up. Not for hiring (use pipeline).",
+      "about": "Rows with a status, like vendors, repairs or follow-ups, so nothing is left hanging.",
+      "audience": "work",
       "author": "flock",
       "category": "productivity",
       "tags": [
@@ -780,6 +816,8 @@
       "usage": "template",
       "name": "Fitness",
       "description": "One person's fitness dashboard: goals in focus, workout plan, planned meals, water, history and an exercise library, with optional tracker sync (Zepp).",
+      "about": "Your workouts, meals and water for the day against your goals, with tomorrow's plan. Reads your watch if you connect one.",
+      "audience": "personal",
       "author": "flock",
       "category": "health",
       "tags": [
@@ -804,6 +842,8 @@
       "type": "template",
       "name": "Fitness Coach",
       "description": "A personal coach that plans your workouts and meals, logs what you eat, drink and do, and keeps a fitness dashboard current, with steps, sleep and PAI from a connected tracker",
+      "about": "A coach that plans your workouts and meals and logs what you eat, drink and do.",
+      "audience": "personal",
       "author": "flock",
       "category": "personal",
       "tags": [
