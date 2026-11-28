@@ -1,10 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-27T12:33:30.696Z",
-  "sourceVersion": "2.1.0",
-  "sourceTag": "whatsapp-v2.1.0-rc1",
+  "generatedAt": "2026-11-28T10:13:00.426Z",
+  "sourceVersion": "2.1.1",
+  "sourceTag": "whatsapp-v2.1.1-rc1",
   "files": {
-    "CHANGELOG.md": "75f36b2e4c69e74a8e36ff9a9616a8fba06e453840c7aca73f4770981c286cb4",
+    "CHANGELOG.md": "49724b94c028efa91b8c94e973f7b91185a26edb8c8a2f1ccc78e79bce1579c0",
     "icon.svg": "1d9a927c3ad3cca31305211227611789007bb568d9414e9a78e1be9f84569e9f",
     "server/_limits.ts": "a8d153ea54c7db7c4b5aa55c3aa782483a2a642bb9a7534d24df2a83f3266ba0",
     "server/_messages.ts": "c7174c4754b1ee057ecdcdbafdc4db8b347e01c21008c0852c3b741515c8198f",
@@ -13,10 +13,10 @@
     "server/_mcp.ts": "38d08f5d89cd425bacb8ddf22748a3557088a69b96f798fcfdb5309aa81688cf",
     "server/lib/baileys.bundle.js": "893b0dd6fef0c4e966d275e16e154c762545acaa69bc02f85dbbbd37119b9554",
     "server/_tools.ts": "e69ef8a788b2ae312c0625336314c5af84b5a8c6b2705cdf134273a041941ada",
-    "server/_socket.ts": "14785e99bd04c9d2f43755559df3f6fe5b1aff90b9cb750b1890ab87a1d67770",
+    "server/_socket.ts": "4111243ec5152835467937ff0189f1c8f777bfb9096beda4325e6f9425b88e9c",
     "server/server.ts": "76a72fe255f98dc085dc785cb39cf0fb7e7f5d9622295f1f0db827709ed37fdf",
     "server/_whatsapp.ts": "3714c9bdea3b27af4e36e850a1ddb1139fc6515dc0cdfad97748849a92e42736",
-    "flock.skill.json": "9a3cddc3f26da4493f3aa6730ed476869fa98b69f0e85e3e9931686ac05f91f6",
-    "instructions.md": "f2558d95d91c83e22ab3b9a7341a5e3d42e74fd541eb6a444e3361fe77362816"
+    "flock.skill.json": "ac7c118c03cb5d5b2ab9d7df4991f3fbe9f3b6a11ba7d071779a687cf3343872",
+    "instructions.md": "79799853e0fa7a9d9a201be289ea2170489233f3910ef8483bb7c5986505c92f"
   }
 }

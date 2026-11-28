@@ -82,7 +82,7 @@ They are roomy for someone working with you, and tight on what WhatsApp treats a
 
 ## Linking
 
-WhatsApp links Flock as one of the person's devices (it shows as "Chrome (Linux)" in their Linked devices on a cloud Flock, "Chrome (Mac OS)" on a Mac). The person only types a link code on their phone. Link code first; a QR code only when they ask for one.
+WhatsApp links Flock as one of the person's devices (it shows as "Chrome (Ubuntu)" in their Linked devices). The person only types a link code on their phone. Link code first; a QR code only when they ask for one.
 
 **The one exception to the private-browser skill.** That skill says a code or a prompt reaches the person only through a hand-off, never posted in chat. For this WhatsApp link code only, you post it in chat yourself: WhatsApp made it for the person to type on their own phone. Never post any other code that way, and never write this one to a file, a note or another chat.
 

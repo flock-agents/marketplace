@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.1
+
+- Links as Chrome on Ubuntu for everyone: "Chrome (Ubuntu)" in Linked devices, on a cloud Flock and on a Mac alike (2.1.0 named the machine's own OS). WhatsApp refused a link code for the old "Flock" label, since the OS slot must be a real OS. A device linked before keeps its name until it is linked again.
+
 ## 2.1.0
 
 - Reports the linked number, masked, so Flock can tell WhatsApp accounts apart: every answer from a linked WhatsApp (`link-status` and `link` once linked, `list-chats`, `read-chat`, `search`, `send-message`, and `unlink` for the number it unlinked) carries `signedInAs`, with its country calling code and last 4 digits shown and the middle hidden, such as `+91••••••5678` (all but the last 4 hidden when the calling code is unknown; never the whole number). No `signedInAs` when WhatsApp is not linked.

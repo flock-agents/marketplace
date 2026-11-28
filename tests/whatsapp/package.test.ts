@@ -26,7 +26,7 @@ function filesIn(dir: string): string[] {
 
 describe("the manifest", () => {
   it("is a local MCP server Flock starts from the package, through its egress, with no form to fill", () => {
-    expect(manifest).toMatchObject({ slug: "whatsapp", version: "2.1.0", tier: "installable" });
+    expect(manifest).toMatchObject({ slug: "whatsapp", version: "2.1.1", tier: "installable" });
     expect(manifest.requires).toHaveLength(1);
     const [req] = manifest.requires;
     expect(req.type).toBe("mcp_server");
@@ -88,7 +88,7 @@ describe("the package's files", () => {
 describe("the catalog entry", () => {
   it("points at this package and its rc tag", () => {
     const entry = catalog.items.find((i: any) => i.slug === "whatsapp");
-    expect(entry).toMatchObject({ type: "connector", path: "skills/whatsapp", latestVersion: "2.1.0", latestTag: "whatsapp-v2.1.0-rc1", minFlockVersion: manifest.minFlockVersion });
+    expect(entry).toMatchObject({ type: "connector", path: "skills/whatsapp", latestVersion: "2.1.1", latestTag: "whatsapp-v2.1.1-rc1", minFlockVersion: manifest.minFlockVersion });
   });
 });
 
@@ -96,7 +96,7 @@ describe("the checksums", () => {
   it("cover every file as it is now", () => {
     const sums = JSON.parse(readFileSync(join(skillDir, ".flock-checksums.json"), "utf8"));
     expect(sums.sourceVersion).toBe(manifest.version);
-    expect(sums.sourceTag).toBe("whatsapp-v2.1.0-rc1");
+    expect(sums.sourceTag).toBe("whatsapp-v2.1.1-rc1");
     const files = filesIn(skillDir).filter((f) => f !== ".flock-checksums.json").sort();
     expect(Object.keys(sums.files).sort()).toEqual(files);
     for (const f of files) expect(sums.files[f]).toBe(createHash("sha256").update(readFileSync(join(skillDir, f))).digest("hex"));

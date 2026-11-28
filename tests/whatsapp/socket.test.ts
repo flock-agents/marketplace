@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "os";
 import { join } from "path";
 import * as bundle from "../../skills/whatsapp/server/lib/baileys.bundle.js";
-import { BROWSER, _resetVersionForTesting, browserOf, deviceNameOf, authDirOf, bunAtLeast, clearAuth, egressOf, historyFilter, isLinked, loadAuth, proxyOf, realSocketFactory, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
+import { BROWSER, _resetVersionForTesting, deviceNameOf, authDirOf, bunAtLeast, clearAuth, egressOf, historyFilter, isLinked, loadAuth, proxyOf, realSocketFactory, socketConfig, waVersion, type BaileysLib } from "../../skills/whatsapp/server/_socket";
 
 const lib = bundle as unknown as BaileysLib;
 const T = lib.proto.HistorySync.HistorySyncType;
@@ -177,30 +177,14 @@ describe.skipIf(!bunAtLeast(Bun.version))("the egress proxy, for real (a local s
 });
 
 describe("who the connector says it is (the browser tuple)", () => {
-  const host = (platform: string, release: string, mac = "") => ({ platform, release, macVersion: () => mac });
-
-  it("Chrome on the machine's real OS, as Baileys names it", () => {
-    expect(browserOf(host("linux", "6.1.0-28-cloud-amd64"))).toEqual(["Linux", "Chrome", "6.1.0-28-cloud-amd64"]);
-    expect(browserOf(host("darwin", "24.4.0", "15.4"))).toEqual(["Mac OS", "Chrome", "15.4"]);
-    expect(browserOf(host("darwin", "24.4.0"))).toEqual(["Mac OS", "Chrome", "24.4.0"]);
-    expect(browserOf(host("win32", "10.0.22631"))).toEqual(["Windows", "Chrome", "10.0.22631"]);
-    expect(browserOf(host("freebsd", "14.1-RELEASE"))).toEqual(["FreeBSD", "Chrome", "14.1-RELEASE"]);
-  });
-
-  it("never Flock as the OS, here or on any platform", () => {
-    for (const p of ["linux", "darwin", "win32", "freebsd", "openbsd", "aix", "sunos", "android"]) {
-      const [os, browser] = browserOf(host(p, "1.0", "15.4"));
-      expect(os).not.toMatch(/flock/i);
-      expect(browser).toBe("Chrome");
-    }
+  it("Chrome on Ubuntu for everyone, a real OS, never Flock", () => {
+    expect(BROWSER).toEqual(["Ubuntu", "Chrome", "22.04.4"]);
     expect(BROWSER[0]).not.toMatch(/flock/i);
-    expect(BROWSER).toEqual(browserOf());
   });
 
   it("the name in Linked devices is what WhatsApp shows for a link code: <browser> (<OS>)", () => {
     expect(deviceNameOf(["Linux", "Chrome", "6.1.0"])).toBe("Chrome (Linux)");
-    expect(deviceNameOf(["Mac OS", "Chrome", "15.4"])).toBe("Chrome (Mac OS)");
-    expect(deviceNameOf()).toBe(`Chrome (${BROWSER[0]})`);
+    expect(deviceNameOf()).toBe("Chrome (Ubuntu)");
   });
 
   it("the link code's display is built the same way inside Baileys", () => {
