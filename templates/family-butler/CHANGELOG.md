@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.10.1
+
+- **"What I do" in the SOUL.** Asked what it can do, Butler answers in a few short WhatsApp-sized lines about the family's planning and remembering (calendar, meals and groceries, trips, the family group) and says private things go to the Personal Assistant.
+- **Cards by where the message came from.** The messaging-formatting line no longer says "simple text formatting" for everything: anything substantial follows Flock's card guidance for the turn (Flock says on each turn where the person is reading). Still concise, numbered cart lists, no markdown tables.
+
 ## 1.10.0
 
 - **Named Butler.** The template's name, the agent's default name, the catalog entry and its onboarding card say "Butler" (was "Family Butler"), so there is one butler, the family's, beside each person's Personal Assistant. The template's slug stays `family-butler`.
