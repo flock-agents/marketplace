@@ -3,7 +3,7 @@
 ## 1.10.1
 
 - **"What I do" in the SOUL.** Asked what it can do, Butler answers in a few short WhatsApp-sized lines about the family's planning and remembering (calendar, meals and groceries, trips, the family group) and says private things go to the Personal Assistant.
-- **Cards by where the message came from.** The messaging-formatting line no longer says "simple text formatting" for everything: options to pick and anything substantial follow Flock's card guidance (a card in the app; on WhatsApp a question with options as a question block, everything else plain text). Still no markdown tables.
+- **Cards by where the message came from.** The messaging-formatting line no longer says "simple text formatting" for everything: anything substantial follows Flock's card guidance for the turn (Flock says on each turn where the person is reading). Still concise, numbered cart lists, no markdown tables.
 
 ## 1.10.0
 
